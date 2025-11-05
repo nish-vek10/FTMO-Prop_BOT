@@ -27,6 +27,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+
 # ===================== USER/ENV CONFIG ===================== #
 local_tz = timezone('Europe/London')
 
@@ -434,6 +435,7 @@ class StrategyProfile:
     tp1_fraction: Optional[float]     # None → no partial; BE can still move if be_after_tp1=True
     tp2_usd_distance: Optional[float]
     tp2_fraction: Optional[float]     # None → no partial
+    tp2_move_sl_to_usd: Optional[float]  # None → do not move SL at TP2; else move SL to entry ± this USD after TP2 trigger
     be_after_tp1: bool
     be_buffer_usd: float
     be_use_spread_buffer: bool
@@ -452,11 +454,12 @@ PROFILES: List[StrategyProfile] = [
         comment_tag =           "CEBot-Prop-5M",
         session_windows =       [("06:00", "12:00"), ("13:00", "18:00")],
         risk_pct_of_equity =    0.30,
-        sl_usd_distance =       5.5,
-        tp1_usd_distance =      7.5,
+        sl_usd_distance =       6.0,
+        tp1_usd_distance =      7.0,
         tp1_fraction =          0.50,
         tp2_usd_distance =      None,
         tp2_fraction =          None,
+        tp2_move_sl_to_usd =    None,
         be_after_tp1 =          True,
         be_buffer_usd =         0.20,
         be_use_spread_buffer =  True,
@@ -477,8 +480,9 @@ PROFILES: List[StrategyProfile] = [
         sl_usd_distance =       10.0,
         tp1_usd_distance =      15.0,
         tp1_fraction =          0.50,
-        tp2_usd_distance =      None,
-        tp2_fraction =          None,
+        tp2_usd_distance =      40.0,
+        tp2_fraction =          0.30,
+        tp2_move_sl_to_usd =    None,
         be_after_tp1 =          True,
         be_buffer_usd =         0.80,
         be_use_spread_buffer =  True,
@@ -979,6 +983,37 @@ def _move_sl_to_breakeven_profile(position, profile: StrategyProfile):
             return _attempt_set_sl_with_magic(position, desired_sl, profile.magic_number, comment="SL->BE")
         return False
 
+def _compute_sl_at_entry_offset(symbol: str, position, offset_usd: float):
+    """
+    Returns the SL price at 'entry ± offset_usd' in the profit-protecting direction.
+    BUY  → entry + offset
+    SELL → entry - offset
+    Enforces broker min stop distance vs current bid/ask; returns None if not currently placeable.
+    """
+    si = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if si is None or tick is None:
+        return None
+
+    entry = float(position.price_open)
+    point = si.point
+    stops_pts = getattr(si, "trade_stops_level", 0) or 0
+    min_dist = stops_pts * point
+
+    if position.type == mt5.ORDER_TYPE_BUY:
+        desired_sl = round(entry + float(offset_usd), si.digits)
+        max_allowed_sl = tick.bid - min_dist if min_dist > 0 else tick.bid
+        if desired_sl <= max_allowed_sl and desired_sl < tick.bid:
+            return desired_sl
+        return None
+    else:
+        desired_sl = round(entry - float(offset_usd), si.digits)
+        min_allowed_sl = tick.ask + min_dist if min_dist > 0 else tick.ask
+        if desired_sl >= min_allowed_sl and desired_sl > tick.ask:
+            return desired_sl
+        return None
+
+
 # ===================== ORDER SEND (PROFILE-AWARE) ===================== #
 def _filling_mode_candidates():
     modes = []
@@ -1153,7 +1188,12 @@ def manage_open_position_for(profile: StrategyProfile):
         return
 
     ticket = position.ticket
-    state = pos_state.get(ticket, {"partial50_done": False, "partial25_done": False, "moved_to_be": False})
+    state = pos_state.get(ticket, {
+        "partial50_done": False,
+        "partial25_done": False,
+        "moved_to_be": False,
+        "tp2_sl_moved": False,
+    })
 
     if not _maybe_retry_initial_sl_profile(position, profile):
         return
@@ -1192,15 +1232,32 @@ def manage_open_position_for(profile: StrategyProfile):
             state["moved_to_be"] = True
             pos_state[ticket] = state
 
-    # TP2 partial (optional)
-    if profile.tp2_usd_distance is not None and _touched(tp2_price, position.type):
-        position = _get_position(profile.symbol, profile.magic_number)
-        if not position:
-            return
+    # === TP2 actions (independent) ===
+    tp2_hit = _touched(tp2_price, position.type) if profile.tp2_usd_distance is not None else False
+    if tp2_hit:
+        # 1) Optional partial at TP2
         if profile.tp2_fraction and not state.get("partial25_done", False):
             if _partial_close(position, profile.tp2_fraction):
                 state["partial25_done"] = True
                 pos_state[ticket] = state
+                # refresh handles/prices after partial
+                time.sleep(0.2)
+                position = _get_position(profile.symbol, profile.magic_number)
+                if not position:
+                    return
+                tick = mt5.symbol_info_tick(position.symbol)
+                si = mt5.symbol_info(position.symbol)
+                if tick is None or si is None:
+                    return
+
+        # 2) Optional SL move to entry ± tp2_move_sl_to_usd
+        if (profile.tp2_move_sl_to_usd is not None) and (not state.get("tp2_sl_moved", False)):
+            desired_sl = _compute_sl_at_entry_offset(position.symbol, position, profile.tp2_move_sl_to_usd)
+            if desired_sl is not None:
+                if _attempt_set_sl_with_magic(position, desired_sl, profile.magic_number, comment="SL->TP2Lock"):
+                    state["tp2_sl_moved"] = True
+                    pos_state[ticket] = state
+
 
 # ===================== LEGACY PENDING SIGNAL (OPTIONAL) ===================== #
 def _maybe_retry_pending():
