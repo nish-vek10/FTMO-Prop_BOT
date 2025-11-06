@@ -495,7 +495,7 @@ PROFILES: List[StrategyProfile] = [
         tp2_fraction =          0.30,
         tp2_move_sl_to_usd =    30.0,
         be_after_tp1 =          True,
-        be_buffer_usd =         0.80,
+        be_buffer_usd =         1.00,
         be_use_spread_buffer =  True,
         use_heikin_ashi =       True,
         atr_period =            1,
@@ -641,13 +641,15 @@ def is_trading_day_for(now_local: datetime, profile: 'StrategyProfile') -> bool:
     Gate NEW ENTRIES by weekday according to per-profile flags.
     Management of existing positions still runs regardless of this gate.
     """
-    # Monday = 0, ... Friday = 4
-    wd = now_local.weekday()
-    if wd == 0:   # Monday
+    wd = now_local.weekday()  # Monday=0 ... Sunday=6
+    if wd >= 5:
+        return False  # block Sat/Sun entries
+    if wd == 0:
         return bool(profile.trade_monday)
-    if wd == 4:   # Friday
+    if wd == 4:
         return bool(profile.trade_friday)
-    return True   # Tue–Thu always enabled
+    return True  # Tue–Thu
+
 
 def effective_risk_pct_for(now_local: datetime, profile: 'StrategyProfile') -> float:
     """
