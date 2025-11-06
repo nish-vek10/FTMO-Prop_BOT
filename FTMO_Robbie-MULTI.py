@@ -465,7 +465,7 @@ PROFILES: List[StrategyProfile] = [
         tp1_fraction =          0.50,
         tp2_usd_distance =      25.0,
         tp2_fraction =          0.25,
-        tp2_move_sl_to_usd =    20.0,
+        tp2_move_sl_to_usd =    None,
         be_after_tp1 =          True,
         be_buffer_usd =         0.20,
         be_use_spread_buffer =  True,
@@ -841,12 +841,17 @@ def _attempt_set_sl_with_magic(position, sl_price, magic, comment="Set SL (retry
         "comment": comment,
     }
     res = mt5.order_send(mod)
-    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"[OK] SL set to {sl_price} on ticket {position.ticket}")
+
+    NO_CHANGES = getattr(mt5, "TRADE_RETCODE_NO_CHANGES", 10025)
+    if res and (res.retcode == mt5.TRADE_RETCODE_DONE or res.retcode == NO_CHANGES):
+        # Treat NO_CHANGES like success; the SL is already at the requested level.
+        print(f"[OK] SL set/unchanged at {sl_price} on ticket {position.ticket} (retcode={res.retcode})")
         return True
+
     print(f"[WARN] SL set attempt failed (ticket {position.ticket}): "
           f"{getattr(res,'retcode',None)} {getattr(res,'comment',None)}")
     return False
+
 
 def compute_tp_price(symbol, action_type, entry_price, tp_usd):
     if tp_usd is None:
@@ -954,33 +959,41 @@ def compute_lot_for_risk_dynamic_equity(symbol, sl_usd, risk_pct_of_equity: floa
 # ===================== SL RETRY (PROFILE-AWARE) ===================== #
 def _maybe_retry_initial_sl_profile(position, profile: StrategyProfile):
     # already has SL?
-    if getattr(position, "sl", 0) not in (None, 0.0):
+    cur_sl = getattr(position, "sl", 0.0) or 0.0
+    desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
+    if desired_sl is None:
+        return False
+
+    si = mt5.symbol_info(position.symbol)
+    if si is None:
+        return False
+    # If current SL equals desired within half a point, consider done.
+    if cur_sl and abs(cur_sl - desired_sl) <= (si.point * 0.5):
         pending_sl.pop(position.ticket, None)
         return True
 
     entry = pending_sl.get(position.ticket)
     if not entry:
-        desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
-        if desired_sl is not None:
-            pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
+        pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
         return False
 
     if entry.get("magic") != profile.magic_number:
         return False
+
+    # Update desired in case symbol properties or stops changed
+    entry["desired_sl"] = desired_sl
 
     now = datetime.now(local_tz)
     last_try = entry.get("last_try")
     if last_try and (now - last_try).total_seconds() < SL_RETRY_EVERY_SECS:
         return False
 
-    sl_price = entry["desired_sl"]
+    # If we can place now, try once
     entry["last_try"] = now
-
-    if _can_place_sl_now(position, sl_price):
-        if _attempt_set_sl_with_magic(position, sl_price, profile.magic_number, comment="Set SL post-fill (retry)"):
+    if _can_place_sl_now(position, desired_sl):
+        if _attempt_set_sl_with_magic(position, desired_sl, profile.magic_number, comment="Set SL post-fill (retry)"):
             pending_sl.pop(position.ticket, None)
             return True
-        return False
     return False
 
 def _periodic_sl_guard_multi():
@@ -994,17 +1007,25 @@ def _periodic_sl_guard_multi():
     for profile in PROFILES:
         position = _get_position(profile.symbol, profile.magic_number)
         if position:
-            if getattr(position, "sl", 0) in (None, 0.0) and position.ticket not in pending_sl:
+            # NEW: if SL already exists, clear any stale queued entry for this ticket
+            cur_sl = (getattr(position, "sl", 0.0) or 0.0)
+            if cur_sl and position.ticket in pending_sl:
+                del pending_sl[position.ticket]  # NEW
+
+            if not cur_sl and position.ticket not in pending_sl:
                 desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
                 if desired_sl is not None:
                     pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
                     print(f"[{profile.name}] Queued SL retry for ticket {position.ticket}: target={desired_sl}")
+
             _maybe_retry_initial_sl_profile(position, profile)
+
             if getattr(position, "sl", 0) not in (None, 0.0):
                 _need_sl_seed_scan = False
         else:
             if _need_sl_seed_scan:
                 print(f"[{profile.name}] Waiting for position to appear to seed SL…")
+
 
 # ===================== BE MOVE (PROFILE-AWARE) ===================== #
 def _move_sl_to_breakeven_profile(position, profile: StrategyProfile):
@@ -1064,6 +1085,19 @@ def _compute_sl_at_entry_offset(symbol: str, position, offset_usd: float):
         if desired_sl >= min_allowed_sl and desired_sl > tick.ask:
             return desired_sl
         return None
+
+
+# ===================== CHECK FOR TP1/TP2 CROSS ON RESTART ===================== #
+def _crossed_level(prev_price: float, now_price: float, target: float, order_type: int) -> bool:
+    """True if price crossed the target this tick."""
+    if target is None or prev_price is None or now_price is None:
+        return False
+    if order_type == mt5.ORDER_TYPE_BUY:
+        # Was below, now at/above
+        return prev_price < target <= now_price
+    else:
+        # Was above, now at/below
+        return prev_price > target >= now_price
 
 
 # ===================== ORDER SEND (PROFILE-AWARE) ===================== #
@@ -1227,6 +1261,7 @@ def attempt_execution_for_signal(profile: StrategyProfile, desired_side: str) ->
     order_type = mt5.ORDER_TYPE_BUY if desired_side == 'BUY' else mt5.ORDER_TYPE_SELL
     return bool(send_order(profile, order_type))
 
+
 # ===================== POSITION MANAGEMENT (PROFILE-AWARE) ===================== #
 def manage_open_position_for(profile: StrategyProfile):
     if prop.enforce_breaches():
@@ -1244,7 +1279,6 @@ def manage_open_position_for(profile: StrategyProfile):
     if not position:
         # prune stale state for this profile's tickets
         for t in list(pos_state.keys()):
-            # (We only clear on explicit no-position detection)
             pass
         return
 
@@ -1254,32 +1288,49 @@ def manage_open_position_for(profile: StrategyProfile):
         return
 
     ticket = position.ticket
+    # Initialize or load per-position state
     state = pos_state.get(ticket, {
         "partial50_done": False,
         "partial25_done": False,
         "moved_to_be": False,
         "tp2_sl_moved": False,
+        # New: last seen prices to force a "cross" after restart
+        "last_seen_bid": None,
+        "last_seen_ask": None,
     })
 
+    # Seed last_seen_* on first sight, so we don't instantly trigger partials after restart
+    if state["last_seen_bid"] is None:
+        state["last_seen_bid"] = tick.bid
+    if state["last_seen_ask"] is None:
+        state["last_seen_ask"] = tick.ask
+
+    prev_bid = state["last_seen_bid"]
+    prev_ask = state["last_seen_ask"]
+
+    # Ensure/Retry initial SL
     if not _maybe_retry_initial_sl_profile(position, profile):
+        # Update last seen then return; nothing else should happen yet
+        state["last_seen_bid"] = tick.bid
+        state["last_seen_ask"] = tick.ask
+        pos_state[ticket] = state
         return
 
+    # Compute targets
     tp1_price = compute_tp_price(position.symbol, position.type, position.price_open, profile.tp1_usd_distance)
     tp2_price = compute_tp_price(position.symbol, position.type, position.price_open, profile.tp2_usd_distance) \
                 if profile.tp2_usd_distance is not None else None
 
-    def _touched(target_price, pos_type):
-        if target_price is None:
-            return False
-        if pos_type == mt5.ORDER_TYPE_BUY:
-            return tick.bid >= target_price
-        else:
-            return tick.ask <= target_price
+    # Decide which side of the book to use for crossing/partial logic
+    now_price = tick.bid if position.type == mt5.ORDER_TYPE_BUY else tick.ask
+    prev_price = prev_bid if position.type == mt5.ORDER_TYPE_BUY else prev_ask
 
-    tp1_hit = _touched(tp1_price, position.type) if tp1_price is not None else False
+    # CROSS events (not just “touch now”)
+    tp1_crossed = _crossed_level(prev_price, now_price, tp1_price, position.type)
+    tp2_crossed = _crossed_level(prev_price, now_price, tp2_price, position.type) if tp2_price is not None else False
 
-    # TP1 partial (optional)
-    if tp1_hit and not state["partial50_done"] and profile.tp1_fraction:
+    # === TP1 partial (optional) ===
+    if tp1_crossed and not state["partial50_done"] and profile.tp1_fraction:
         if _partial_close(position, profile.tp1_fraction):
             state["partial50_done"] = True
             pos_state[ticket] = state
@@ -1291,22 +1342,22 @@ def manage_open_position_for(profile: StrategyProfile):
             si   = mt5.symbol_info(position.symbol)
             if tick is None or si is None:
                 return
+            # refresh prices after partial
+            now_price = tick.bid if position.type == mt5.ORDER_TYPE_BUY else tick.ask
 
     # Move SL -> BE after TP1, even if no partial
-    if profile.be_after_tp1 and tp1_hit and not state.get("moved_to_be", False):
+    if profile.be_after_tp1 and tp1_crossed and not state.get("moved_to_be", False):
         if _move_sl_to_breakeven_profile(position, profile):
             state["moved_to_be"] = True
             pos_state[ticket] = state
 
     # === TP2 actions (independent) ===
-    tp2_hit = _touched(tp2_price, position.type) if profile.tp2_usd_distance is not None else False
-    if tp2_hit:
+    if tp2_crossed:
         # 1) Optional partial at TP2
         if profile.tp2_fraction and not state.get("partial25_done", False):
             if _partial_close(position, profile.tp2_fraction):
                 state["partial25_done"] = True
                 pos_state[ticket] = state
-                # refresh handles/prices after partial
                 time.sleep(0.2)
                 position = _get_position(profile.symbol, profile.magic_number)
                 if not position:
@@ -1315,6 +1366,7 @@ def manage_open_position_for(profile: StrategyProfile):
                 si = mt5.symbol_info(position.symbol)
                 if tick is None or si is None:
                     return
+                now_price = tick.bid if position.type == mt5.ORDER_TYPE_BUY else tick.ask
 
         # 2) Optional SL move to entry ± tp2_move_sl_to_usd
         if (profile.tp2_move_sl_to_usd is not None) and (not state.get("tp2_sl_moved", False)):
@@ -1323,6 +1375,11 @@ def manage_open_position_for(profile: StrategyProfile):
                 if _attempt_set_sl_with_magic(position, desired_sl, profile.magic_number, comment="SL->TP2Lock"):
                     state["tp2_sl_moved"] = True
                     pos_state[ticket] = state
+
+    # Update last-seen prices at the end
+    state["last_seen_bid"] = tick.bid
+    state["last_seen_ask"] = tick.ask
+    pos_state[ticket] = state
 
 
 # ===================== LEGACY PENDING SIGNAL (OPTIONAL) ===================== #
