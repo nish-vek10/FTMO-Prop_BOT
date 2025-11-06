@@ -443,6 +443,12 @@ class StrategyProfile:
     atr_period: int
     atr_mult: float
 
+    # day-of-week controls and optional risk overrides
+    trade_monday: bool = True  # if False → block NEW entries on Mondays
+    trade_friday: bool = True  # if False → block NEW entries on Fridays
+    monday_risk_pct_override: Optional[float] = None  # if set and Monday trading is enabled, use this risk%
+    friday_risk_pct_override: Optional[float] = None  # if set and Friday trading is enabled, use this risk%
+
 PROFILES: List[StrategyProfile] = [
     StrategyProfile(
         name =                  "XAU-5M",
@@ -457,15 +463,20 @@ PROFILES: List[StrategyProfile] = [
         sl_usd_distance =       6.0,
         tp1_usd_distance =      7.0,
         tp1_fraction =          0.50,
-        tp2_usd_distance =      None,
-        tp2_fraction =          None,
-        tp2_move_sl_to_usd =    None,
+        tp2_usd_distance =      25.0,
+        tp2_fraction =          0.25,
+        tp2_move_sl_to_usd =    20.0,
         be_after_tp1 =          True,
         be_buffer_usd =         0.20,
         be_use_spread_buffer =  True,
         use_heikin_ashi =       True,
         atr_period =            1,
         atr_mult =              1.85,
+
+        trade_monday = True,                      # False to block new entries on Mondays
+        trade_friday = True,                      # False to block new entries on Fridays
+        monday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
     StrategyProfile(
         name =                  "XAU-15M",
@@ -480,15 +491,20 @@ PROFILES: List[StrategyProfile] = [
         sl_usd_distance =       10.0,
         tp1_usd_distance =      15.0,
         tp1_fraction =          0.50,
-        tp2_usd_distance =      40.0,
+        tp2_usd_distance =      35.0,
         tp2_fraction =          0.30,
-        tp2_move_sl_to_usd =    None,
+        tp2_move_sl_to_usd =    30.0,
         be_after_tp1 =          True,
         be_buffer_usd =         0.80,
         be_use_spread_buffer =  True,
         use_heikin_ashi =       True,
         atr_period =            1,
         atr_mult =              1.85,
+
+        trade_monday = True,                      # False to block new entries on Mondays
+        trade_friday = True,                      # False to block new entries on Fridays
+        monday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
 ]
 
@@ -617,6 +633,40 @@ def next_bar_close(now_local: datetime, profile: 'StrategyProfile'):
     if target <= now_local:
         target += timedelta(minutes=step)
     return target
+
+
+# ===================== DAY-OF-WEEK & RISK HELPERS ===================== #
+def is_trading_day_for(now_local: datetime, profile: 'StrategyProfile') -> bool:
+    """
+    Gate NEW ENTRIES by weekday according to per-profile flags.
+    Management of existing positions still runs regardless of this gate.
+    """
+    # Monday = 0, ... Friday = 4
+    wd = now_local.weekday()
+    if wd == 0:   # Monday
+        return bool(profile.trade_monday)
+    if wd == 4:   # Friday
+        return bool(profile.trade_friday)
+    return True   # Tue–Thu always enabled
+
+def effective_risk_pct_for(now_local: datetime, profile: 'StrategyProfile') -> float:
+    """
+    Returns the risk% to use RIGHT NOW for entries:
+    - Monday: use monday_risk_pct_override if provided and Monday is enabled; else base risk_pct_of_equity
+    - Friday: use friday_risk_pct_override if provided and Friday is enabled; else base risk_pct_of_equity
+    - Tue–Thu: base risk_pct_of_equity
+    """
+    wd = now_local.weekday()
+    if wd == 0:   # Monday
+        if not profile.trade_monday:
+            return profile.risk_pct_of_equity  # not used because entries are blocked, but safe default
+        return profile.monday_risk_pct_override if profile.monday_risk_pct_override is not None else profile.risk_pct_of_equity
+    if wd == 4:   # Friday
+        if not profile.trade_friday:
+            return profile.risk_pct_of_equity
+        return profile.friday_risk_pct_override if profile.friday_risk_pct_override is not None else profile.risk_pct_of_equity
+    return profile.risk_pct_of_equity
+
 
 # ===================== INDICATORS ===================== #
 def calculate_heikin_ashi(df):
@@ -1030,6 +1080,13 @@ def send_order(profile: StrategyProfile, action_type, lot=None):
         print(f"[{profile.name}] [BLOCK] Outside session — order veto.")
         return False
 
+    # Day-of-week gate for NEW ENTRIES
+    now_local = datetime.now(local_tz)
+    if not is_trading_day_for(now_local, profile):
+        dayname = now_local.strftime("%A")
+        print(f"[{profile.name}] [BLOCK] {dayname} entries disabled by profile settings.")
+        return False
+
     if prop.enforce_breaches():
         print(f"[{profile.name}] [BLOCK] Prop rule breached — order blocked.")
         return False
@@ -1059,11 +1116,12 @@ def send_order(profile: StrategyProfile, action_type, lot=None):
     sl_distance = abs(entry_price - sl_price_snapshot)
 
     if lot is None:
-        lot, risk_amount = compute_lot_for_risk_dynamic_equity(symbol, sl_distance, profile.risk_pct_of_equity)
+        effective_risk_pct = effective_risk_pct_for(datetime.now(local_tz), profile)
+        lot, risk_amount = compute_lot_for_risk_dynamic_equity(symbol, sl_distance, effective_risk_pct)
         if lot is None or lot <= 0:
             print(f"[{profile.name}] [ERROR] Computed lot is invalid; aborting order.")
             return False
-        print(f"[{profile.name}] [RISK] Risk: {profile.risk_pct_of_equity:.2f}% of equity "
+        print(f"[{profile.name}] [RISK] Risk: {effective_risk_pct:.2f}% of equity "
               f"(${risk_amount:.2f}) | SL dist: ${sl_distance:.2f} | Lot: {lot}")
 
     lot = _round_to_step(lot, si.volume_step)
@@ -1140,6 +1198,12 @@ def attempt_execution_for_signal(profile: StrategyProfile, desired_side: str) ->
         return False
 
     if prop.enforce_breaches():
+        return False
+
+    # Day-of-week entry gate
+    now_local = datetime.now(local_tz)
+    if not is_trading_day_for(now_local, profile):
+        # Management of open positions is handled elsewhere; we just refuse new entries here.
         return False
 
     hit, _, _ = prop.profit_target_hit()
@@ -1329,9 +1393,13 @@ try:
             # Edge: just entered session
             if is_now_in_session and not last_in_session[profile.name]:
                 sess_start, sess_end = session_bounds_for(now_local, profile)
+                dayname = now_local.strftime('%A')
+                day_ok = is_trading_day_for(now_local, profile)
+                gate_note = "" if day_ok else " (entries disabled today)"
                 print(
                     f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
-                    f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')}")
+                    f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
+
                 in_session_announced[profile.name] = True
 
             # Edge: just exited session
@@ -1357,8 +1425,13 @@ try:
             # ---- non-blocking scheduler for bar closes ----
             sess_start, sess_end = session_bounds_for(now_local, profile)
             if not in_session_announced[profile.name]:
-                print(f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
-                      f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')}")
+                dayname = now_local.strftime('%A')
+                day_ok = is_trading_day_for(now_local, profile)
+                gate_note = "" if day_ok else " (entries disabled today)"
+                print(
+                    f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
+                    f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
+
                 in_session_announced[profile.name] = True
 
             # if session is about to end, cap the target to session end
