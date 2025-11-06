@@ -46,10 +46,10 @@ pending_since  = None
 last_retry_at  = None
 RETRY_EVERY_SECS = 15
 
-# per-position state: ticket -> {...}
-pos_state = {}
-# queued SL attempts: ticket -> {"desired_sl": float, "last_try": datetime, "magic": int}
-pending_sl = {}
+pos_state = {} # per-position state: ticket -> {...}
+pending_sl = {} # queued SL attempts: ticket -> {"desired_sl": float, "last_try": datetime, "magic": int}
+existing_sl_noted = set() # tickets we've already announced as "existing SL detected" to avoid spammy logs
+
 
 # === PROP RULES CONFIG === #
 phase1_target_pct        = 10.0
@@ -475,8 +475,8 @@ PROFILES: List[StrategyProfile] = [
 
         trade_monday = True,                      # False to block new entries on Mondays
         trade_friday = True,                      # False to block new entries on Fridays
-        monday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
-        friday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
+        monday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
     StrategyProfile(
         name =                  "XAU-15M",
@@ -503,8 +503,8 @@ PROFILES: List[StrategyProfile] = [
 
         trade_monday = True,                      # False to block new entries on Mondays
         trade_friday = True,                      # False to block new entries on Fridays
-        monday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
-        friday_risk_pct_override = None,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
+        monday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
 ]
 
@@ -794,6 +794,10 @@ def _close_position_ticket(position):
         print(f"[ERROR] Failed to close position: {getattr(res, 'retcode', None)}, {getattr(res, 'comment', None)}")
     else:
         print(f"[OK] POSITION CLOSED: {res}")
+        try:
+            existing_sl_noted.discard(position.ticket)
+        except Exception:
+            pass
 
 def compute_sl_price(symbol, action_type, entry_price, sl_usd):
     si = mt5.symbol_info(symbol)
@@ -852,6 +856,28 @@ def _attempt_set_sl_with_magic(position, sl_price, magic, comment="Set SL (retry
           f"{getattr(res,'retcode',None)} {getattr(res,'comment',None)}")
     return False
 
+def _reconcile_position_sets():
+    """Clean up state for tickets that are no longer open."""
+    try:
+        open_positions = mt5.positions_get() or []
+        open_tickets = {p.ticket for p in open_positions}
+
+        # purge pending_sl
+        for t in list(pending_sl.keys()):
+            if t not in open_tickets:
+                pending_sl.pop(t, None)
+
+        # purge pos_state
+        for t in list(pos_state.keys()):
+            if t not in open_tickets:
+                pos_state.pop(t, None)
+
+        # purge existing_sl_noted
+        for t in list(existing_sl_noted):
+            if t not in open_tickets:
+                existing_sl_noted.discard(t)
+    except Exception as e:
+        print(f"[WARN] reconcile failed: {e}")
 
 def compute_tp_price(symbol, action_type, entry_price, tp_usd):
     if tp_usd is None:
@@ -958,43 +984,54 @@ def compute_lot_for_risk_dynamic_equity(symbol, sl_usd, risk_pct_of_equity: floa
 
 # ===================== SL RETRY (PROFILE-AWARE) ===================== #
 def _maybe_retry_initial_sl_profile(position, profile: StrategyProfile):
-    # already has SL?
-    cur_sl = getattr(position, "sl", 0.0) or 0.0
+    """
+    Ensure an initial SL is attached ONLY if the position currently has NO SL.
+    If an SL already exists (e.g., manually moved, BE, TP2 lock), leave it alone.
+    """
+    global existing_sl_noted
+
+    # Current SL?
+    cur_sl = (getattr(position, "sl", 0.0) or 0.0)
+    ticket = position.ticket
+
+    # If an SL already exists, do NOT try to "normalize" it to the initial SL.
+    # Clear any stale queued retries for this ticket and exit.
+    if cur_sl:
+        if ticket not in existing_sl_noted:
+            print(f"[{profile.name}] Existing SL detected on ticket {ticket}; leaving as-is.")
+            existing_sl_noted.add(ticket)
+        if ticket in pending_sl:
+            pending_sl.pop(ticket, None)
+        return True
+
+    # No SL yet → compute the initial SL target and attempt to place it / retry later
     desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
     if desired_sl is None:
         return False
 
-    si = mt5.symbol_info(position.symbol)
-    if si is None:
-        return False
-    # If current SL equals desired within half a point, consider done.
-    if cur_sl and abs(cur_sl - desired_sl) <= (si.point * 0.5):
-        pending_sl.pop(position.ticket, None)
-        return True
-
-    entry = pending_sl.get(position.ticket)
+    entry = pending_sl.get(ticket)
     if not entry:
-        pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
+        pending_sl[ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
         return False
 
+    # Entry exists – ensure it's for this profile/magic, keep desired up to date
     if entry.get("magic") != profile.magic_number:
         return False
 
-    # Update desired in case symbol properties or stops changed
-    entry["desired_sl"] = desired_sl
+    entry["desired_sl"] = desired_sl  # refresh desired in case symbol props changed
 
     now = datetime.now(local_tz)
     last_try = entry.get("last_try")
     if last_try and (now - last_try).total_seconds() < SL_RETRY_EVERY_SECS:
         return False
 
-    # If we can place now, try once
     entry["last_try"] = now
     if _can_place_sl_now(position, desired_sl):
         if _attempt_set_sl_with_magic(position, desired_sl, profile.magic_number, comment="Set SL post-fill (retry)"):
-            pending_sl.pop(position.ticket, None)
+            pending_sl.pop(ticket, None)
             return True
     return False
+
 
 def _periodic_sl_guard_multi():
     """Every SL_RETRY_EVERY_SECS: scan positions per profile and try to attach SL if missing."""
@@ -1525,6 +1562,7 @@ try:
             _maybe_retry_pending()
             manage_open_position_for(profile)
             _periodic_sl_guard_multi()
+            _reconcile_position_sets()
 
             # if we haven't reached the target yet, give other profiles a turn
             if (next_target_by_profile[profile.name] - datetime.now(local_tz)).total_seconds() > 0:
@@ -1602,7 +1640,6 @@ try:
                 print(f"[{profile.name}] No open position.")
 
             # ensure initial SL queued if missing
-            if position and getattr(position, "sl", 0) in (None, 0.0) and position.ticket not in pending_sl:
                 desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
                 if desired_sl:
                     pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
