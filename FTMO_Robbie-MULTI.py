@@ -1636,14 +1636,20 @@ try:
             if position:
                 open_side = 'BUY' if position.type == mt5.ORDER_TYPE_BUY else 'SELL'
                 print(f"[{profile.name}] OPEN: {open_side}, vol: {position.volume}, entry: {position.price_open}")
+
+                # ensure initial SL queued if missing (guarded so it never runs when position is None)
+                if (getattr(position, "sl", 0) in (None, 0.0)) and (position.ticket not in pending_sl):
+                    desired_sl = compute_sl_price(position.symbol, position.type, position.price_open,
+                                                  profile.sl_usd_distance)
+                    if desired_sl:
+                        pending_sl[position.ticket] = {
+                            "desired_sl": desired_sl,
+                            "last_try": None,
+                            "magic": profile.magic_number
+                        }
+                        print(f"[{profile.name}] Queued SL retry for ticket {position.ticket}: target={desired_sl}")
             else:
                 print(f"[{profile.name}] No open position.")
-
-            # ensure initial SL queued if missing
-                desired_sl = compute_sl_price(position.symbol, position.type, position.price_open, profile.sl_usd_distance)
-                if desired_sl:
-                    pending_sl[position.ticket] = {"desired_sl": desired_sl, "last_try": None, "magic": profile.magic_number}
-                    print(f"[{profile.name}] Queued SL retry for ticket {position.ticket}: target={desired_sl}")
 
             # manage open position
             manage_open_position_for(profile)
