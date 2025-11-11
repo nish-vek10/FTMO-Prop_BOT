@@ -428,7 +428,7 @@ class StrategyProfile:
     timeframe: int              # mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, ...
     magic_number: int           # unique per profile
     comment_tag: str            # appears on trades/comments
-    session_windows: List[Tuple[str, str]]
+    session_windows: Optional[List[Tuple[str, str]]]  # None or [] => always-on
     risk_pct_of_equity: float   # % of CURRENT equity
     sl_usd_distance: float
     tp1_usd_distance: Optional[float]
@@ -478,6 +478,7 @@ PROFILES: List[StrategyProfile] = [
         monday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
         friday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
+
     StrategyProfile(
         name =                  "XAU-15M",
         symbol =                "XAUUSD",
@@ -486,7 +487,7 @@ PROFILES: List[StrategyProfile] = [
         timeframe =             mt5.TIMEFRAME_M15,
         magic_number =          112201,
         comment_tag =           "CEBot-Prop-15M",
-        session_windows =       [("01:00", "20:55")],
+        session_windows =       None,
         risk_pct_of_equity =    0.50,
         sl_usd_distance =       10.0,
         tp1_usd_distance =      15.0,
@@ -503,8 +504,8 @@ PROFILES: List[StrategyProfile] = [
 
         trade_monday = True,                      # False to block new entries on Mondays
         trade_friday = True,                      # False to block new entries on Fridays
-        monday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
-        friday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
+        monday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
 ]
 
@@ -608,7 +609,14 @@ def _session_window_today(hhmm: str, tz):
     # pytz localization keeps BST/GMT rules correct; London is currently GMT
     return tz.localize(naive)
 
+def _has_sessions(profile: 'StrategyProfile') -> bool:
+    sw = getattr(profile, "session_windows", None)
+    return bool(sw)  # False for None or empty list
+
 def in_session_for(now_local: datetime, profile: 'StrategyProfile') -> bool:
+    # Always-on if no windows provided
+    if not _has_sessions(profile):
+        return True
     for start, end in profile.session_windows:
         start_dt = _session_window_today(start, local_tz)
         end_dt   = _session_window_today(end,   local_tz)
@@ -617,7 +625,9 @@ def in_session_for(now_local: datetime, profile: 'StrategyProfile') -> bool:
     return False
 
 def session_bounds_for(now_local: datetime, profile: 'StrategyProfile'):
-    """Returns (start_dt, end_dt) for the window that currently contains now_local, else (None, None)."""
+    """Returns (start_dt, end_dt) for current window, or (None, None) if none or always-on."""
+    if not _has_sessions(profile):
+        return None, None
     for start, end in profile.session_windows:
         start_dt = _session_window_today(start, local_tz)
         end_dt   = _session_window_today(end,   local_tz)
@@ -1488,13 +1498,17 @@ try:
 
             # Edge: just entered session
             if is_now_in_session and not last_in_session[profile.name]:
-                sess_start, sess_end = session_bounds_for(now_local, profile)
-                dayname = now_local.strftime('%A')
-                day_ok = is_trading_day_for(now_local, profile)
-                gate_note = "" if day_ok else " (entries disabled today)"
-                print(
-                    f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
-                    f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
+                if not _has_sessions(profile):
+                    print(
+                        f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] ALWAYS-ON (no session window)")
+                else:
+                    sess_start, sess_end = session_bounds_for(now_local, profile)
+                    dayname = now_local.strftime('%A')
+                    day_ok = is_trading_day_for(now_local, profile)
+                    gate_note = "" if day_ok else " (entries disabled today)"
+                    print(
+                        f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
+                        f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
 
                 in_session_announced[profile.name] = True
 
@@ -1521,12 +1535,16 @@ try:
             # ---- non-blocking scheduler for bar closes ----
             sess_start, sess_end = session_bounds_for(now_local, profile)
             if not in_session_announced[profile.name]:
-                dayname = now_local.strftime('%A')
-                day_ok = is_trading_day_for(now_local, profile)
-                gate_note = "" if day_ok else " (entries disabled today)"
-                print(
-                    f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
-                    f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
+                if not _has_sessions(profile):
+                    print(
+                        f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] ALWAYS-ON (no session window)")
+                else:
+                    dayname = now_local.strftime('%A')
+                    day_ok = is_trading_day_for(now_local, profile)
+                    gate_note = "" if day_ok else " (entries disabled today)"
+                    print(
+                        f"{now_local.strftime('%H:%M:%S')} | [{profile.name} {profile.symbol}] IN SESSION: "
+                        f"{sess_start.strftime('%H:%M')}–{sess_end.strftime('%H:%M')} | {dayname}{gate_note}")
 
                 in_session_announced[profile.name] = True
 
