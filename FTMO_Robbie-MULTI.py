@@ -458,13 +458,13 @@ PROFILES: List[StrategyProfile] = [
         timeframe =             mt5.TIMEFRAME_M5,
         magic_number =          112200,
         comment_tag =           "CEBot-Prop-5M",
-        session_windows =       [("06:00", "12:00"), ("13:00", "18:00")],
-        risk_pct_of_equity =    0.30,
+        session_windows =       [("07:00", "12:00"), ("13:00", "18:00")],
+        risk_pct_of_equity =    0.25,
         sl_usd_distance =       6.0,
         tp1_usd_distance =      7.0,
-        tp1_fraction =          0.60,
+        tp1_fraction =          0.50,
         tp2_usd_distance =      25.0,
-        tp2_fraction =          0.15,
+        tp2_fraction =          0.20,
         tp2_move_sl_to_usd =    None,
         be_after_tp1 =          True,
         be_buffer_usd =         0.20,
@@ -475,38 +475,38 @@ PROFILES: List[StrategyProfile] = [
 
         trade_monday = True,                      # False to block new entries on Mondays
         trade_friday = True,                      # False to block new entries on Fridays
-        monday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
-        friday_risk_pct_override = 0.10,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
+        monday_risk_pct_override = 0.25,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+        friday_risk_pct_override = 0.25,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
     ),
 
-    StrategyProfile(
-        name =                  "XAU-15M",
-        symbol =                "XAUUSD",
-        oanda_symbol =          "XAU_USD",
-        granularity =           "M15",
-        timeframe =             mt5.TIMEFRAME_M15,
-        magic_number =          112201,
-        comment_tag =           "CEBot-Prop-15M",
-        session_windows =       None,
-        risk_pct_of_equity =    0.50,
-        sl_usd_distance =       10.0,
-        tp1_usd_distance =      13.0,
-        tp1_fraction =          0.50,
-        tp2_usd_distance =      35.0,
-        tp2_fraction =          0.30,
-        tp2_move_sl_to_usd =    30.0,
-        be_after_tp1 =          True,
-        be_buffer_usd =         1.00,
-        be_use_spread_buffer =  True,
-        use_heikin_ashi =       True,
-        atr_period =            1,
-        atr_mult =              1.85,
-
-        trade_monday = True,                      # False to block new entries on Mondays
-        trade_friday = True,                      # False to block new entries on Fridays
-        monday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
-        friday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
-    ),
+    # StrategyProfile(
+    #     name =                  "XAU-15M",
+    #     symbol =                "XAUUSD",
+    #     oanda_symbol =          "XAU_USD",
+    #     granularity =           "M15",
+    #     timeframe =             mt5.TIMEFRAME_M15,
+    #     magic_number =          112201,
+    #     comment_tag =           "CEBot-Prop-15M",
+    #     session_windows =       None,
+    #     risk_pct_of_equity =    0.50,
+    #     sl_usd_distance =       10.0,
+    #     tp1_usd_distance =      13.0,
+    #     tp1_fraction =          0.50,
+    #     tp2_usd_distance =      35.0,
+    #     tp2_fraction =          0.30,
+    #     tp2_move_sl_to_usd =    30.0,
+    #     be_after_tp1 =          True,
+    #     be_buffer_usd =         1.00,
+    #     be_use_spread_buffer =  True,
+    #     use_heikin_ashi =       True,
+    #     atr_period =            1,
+    #     atr_mult =              1.85,
+    #
+    #     trade_monday = True,                      # False to block new entries on Mondays
+    #     trade_friday = True,                      # False to block new entries on Fridays
+    #     monday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Mondays (if enabled)
+    #     friday_risk_pct_override = 0.15,          # e.g., 0.20 to use 0.20% on Fridays (if enabled)
+    # ),
 ]
 
 # ===================== CONNECT TO MT5 ===================== #
