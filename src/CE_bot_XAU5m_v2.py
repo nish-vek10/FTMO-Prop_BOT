@@ -57,13 +57,11 @@ import pandas as pd
 import requests
 import MetaTrader5 as mt5
 
-from backtests.run_single_CE_XAU_5M import PROJECT_ROOT
-
 
 # ============================================================
 # PROJECT ROOT (auto-detected from this file location)
 # ============================================================
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 # ============================================================
@@ -115,7 +113,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 JSONL_LOG_PATH = LOG_DIR / "CE_bot_v2.jsonl"
 
 # Only log trailing SL changes if change >= this (price units, XAU USD)
-SL_LOG_MIN_DELTA_USD = 1.0
+SL_LOG_MIN_DELTA_USD = 0.5
 
 # Polling
 POLL_SLEEP_SECS = 1.0  # while waiting for a new candle
@@ -374,6 +372,9 @@ def lots_for_risk(sl_dist_usd: float, entry_price: float) -> Tuple[float, dict]:
       lots = risk_amount / risk_per_lot
     Apply broker min/max/step and (optional) notional cap.
     """
+
+    CONTRACT_SIZE = 100.0
+
     si = mt5.symbol_info(MT5_SYMBOL)
     acc = mt5.account_info()
     if not si or not acc:
@@ -407,7 +408,10 @@ def lots_for_risk(sl_dist_usd: float, entry_price: float) -> Tuple[float, dict]:
 
     capped_notional = False
     if USE_NOTIONAL_CAP and MAX_NOTIONAL_USD > 0:
-        max_lots_notional = float(MAX_NOTIONAL_USD) / max(1e-9, float(entry_price) * float(CONTRACT_SIZE))
+
+        cs = float(getattr(si, "trade_contract_size", 0.0) or CONTRACT_SIZE)
+        max_lots_notional = float(MAX_NOTIONAL_USD) / max(1e-9, float(entry_price) * cs)
+
         if raw_lots > max_lots_notional:
             raw_lots = max_lots_notional
             capped_notional = True
@@ -616,8 +620,6 @@ def main_loop():
         ce_atr_mult=CE_ATR_MULT,
         notional_cap=USE_NOTIONAL_CAP,
         max_notional=MAX_NOTIONAL_USD,
-        slippage_entry=SLIPPAGE_ENTRY_ATR_MULT,
-        slippage_exit=SLIPPAGE_EXIT_ATR_MULT,
     )
 
     while True:

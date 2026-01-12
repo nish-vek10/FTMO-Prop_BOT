@@ -1,0 +1,5 @@
+{"ts_utc": "2026-01-12T19:27:32.788810+00:00", "event": "MT5_CONNECTED", "login": 52683668, "balance": 100000.0, "equity": 100000.0}
+{"ts_utc": "2026-01-12T19:33:53.671433+00:00", "event": "MT5_CONNECTED", "login": 52683668, "balance": 100000.0, "equity": 100000.0}
+{"ts_utc": "2026-01-12T19:33:53.671568+00:00", "event": "BOT_START", "symbol": "XAUUSD", "risk_pct": 0.25, "dynamic_risk": false, "disable_tp": false, "tp_r": 1.5, "ch_atr_period": 20, "ch_atr_mult": 1.0, "ch_lookback": 180, "ce_atr_period": 1, "ce_atr_mult": 1.85, "notional_cap": true, "max_notional": 500000.0}
+{"ts_utc": "2026-01-12T19:33:54.225111+00:00", "event": "BAR", "time": "2026-01-12 19:25:00+00:00", "signal": null, "open_side": null, "chand_long": 4624.909, "chand_short": 4568.736}
+{"ts_utc": "2026-01-12T19:35:02.325521+00:00", "event": "BAR", "time": "2026-01-12 19:30:00+00:00", "signal": null, "open_side": null, "chand_long": 4624.959, "chand_short": 4568.686}
