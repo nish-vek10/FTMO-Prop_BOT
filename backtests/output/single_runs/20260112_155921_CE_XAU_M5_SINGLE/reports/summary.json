@@ -1,0 +1,48 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.0,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 80,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 4501,
+    "winners": 4126,
+    "win_rate": 91.66851810708732,
+    "initialBalance": 100000.0,
+    "finalEquity": 2019022.9923961132,
+    "netpnl": 1919022.9923961132,
+    "netpnl_pct": 1919.0229923961133,
+    "max_dd_pct": -0.5384773381662391,
+    "avgpnl": 426.3548083528351,
+    "profit_factor": 13.881154126398107,
+    "expectancy": 426.35480835283516,
+    "skipped_min_sl": 252,
+    "avg_lots": 1.3508855258565817,
+    "p95_lots": 5.356150151216773,
+    "max_lots": 9.977494283062224,
+    "pct_lots_capped": 0.0,
+    "avg_sl_dist_usd": 12.296140980029277,
+    "p10_sl_dist_usd": 1.3743295826225221,
+    "min_sl_dist_usd": 0.5011278240958745,
+    "avg_R": 0.8527096167056701,
+    "median_R": 0.9906547265858735,
+    "cum_R": 3838.045984792221
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-12T15:59:37.306697+00:00"
+}

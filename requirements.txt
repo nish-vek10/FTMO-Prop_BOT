@@ -1,0 +1,8 @@
+numpy
+pandas
+matplotlib
+requests
+python-dateutil
+pytz
+tqdm
+MetaTrader5

@@ -1,0 +1,75 @@
+{
+  "SYMBOL_OANDA": "XAU_USD",
+  "GRANULARITY": "M5",
+  "START_DATE_UTC": "2025-01-01T00:00:00+00:00",
+  "END_DATE_UTC": "2026-01-12T13:33:35.307053+00:00",
+  "INITIAL_BALANCE": 100000.0,
+  "RISK_PCT_PER_TRADE": 0.5,
+  "DYNAMIC_RISK": true,
+  "CONTRACT_SIZE": 100.0,
+  "USE_SPREAD_COST": false,
+  "SPREAD_USD": 0.2,
+  "MIN_SL_DIST_USD": 0.5,
+  "MAX_LOTS_CAP": 50.0,
+  "ENTRY_ENGINE": {
+    "USE_HEIKIN_ASHI": true,
+    "CE_ATR_PERIOD": 1,
+    "CE_ATR_MULT": 1.85
+  },
+  "GRID": {
+    "STOP_MODES": [
+      "atr_static",
+      "atr_trailing",
+      "chandelier"
+    ],
+    "GRID_ATR_PERIOD": [
+      5,
+      10,
+      15,
+      20
+    ],
+    "GRID_ATR_INIT_MULT": [
+      1.0,
+      2.0,
+      3.0,
+      4.0
+    ],
+    "GRID_ATR_TRAIL_MULT": [
+      1.0,
+      2.0,
+      3.0,
+      4.0
+    ],
+    "GRID_CHAN_LOOKBACK": [
+      20,
+      40,
+      60,
+      80
+    ],
+    "GRID_TP_R": [
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0,
+      4.5,
+      5.0
+    ],
+    "GRID_TRAIL_START_R": [
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0
+    ],
+    "GRID_MAX_HOLD_BARS": [
+      null,
+      24,
+      48,
+      96
+    ]
+  }
+}

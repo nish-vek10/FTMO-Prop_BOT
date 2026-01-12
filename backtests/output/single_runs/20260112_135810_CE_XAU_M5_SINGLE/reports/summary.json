@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 5,
+    "atr_init_mult": 2.0,
+    "tp_r": 1.0,
+    "trail_start_r": 3.0,
+    "atr_trail_mult": 2.0,
+    "chan_lookback": 40,
+    "max_hold_bars": null,
+    "dynamic_risk": true
+  },
+  "summary": {
+    "trades": 4397,
+    "winners": 3216,
+    "win_rate": 73.14077780304753,
+    "initialBalance": 100000.0,
+    "finalEquity": 65508181.89018252,
+    "netpnl": 65408181.89018252,
+    "netpnl_pct": 65408.18189018252,
+    "max_dd_pct": -2.5428535696854793,
+    "avgpnl": 14875.63836483569,
+    "profit_factor": 5.86813362638731,
+    "expectancy": 14875.63836483569
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-12T13:58:50.363405+00:00"
+}

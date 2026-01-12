@@ -1,0 +1,67 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.5,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 120,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 4574,
+    "winners": 4039,
+    "win_rate": 88.30345430695235,
+    "initialBalance": 100000.0,
+    "finalEquity": 1826297.5893128964,
+    "netpnl": 1726297.5893128964,
+    "netpnl_pct": 1726.2975893128964,
+    "max_dd_pct": -3.5731516417239475,
+    "avgpnl": 377.4153015550712,
+    "profit_factor": 13.143950044093275,
+    "expectancy": 377.4153015550712,
+    "maxWinsStreak": 63,
+    "maxLossesStreak": 7,
+    "max_streak_loss_cash": -2377.2392238752823,
+    "max_streak_profit_cash": 30454.189221286804,
+    "skipped_min_sl": 179,
+    "avg_lots": 0.7254699800381178,
+    "p95_lots": 1.692842419352101,
+    "max_lots": 1.9052768098223387,
+    "pct_lots_capped": 0.0,
+    "pct_notional_capped": 23.043288150415393,
+    "avg_notional_usd": 244578.57510547794,
+    "p95_notional_usd": 500000.0,
+    "max_notional_usd": 500000.00000000006,
+    "avg_sl_dist_usd": 14.80295278486222,
+    "p10_sl_dist_usd": 1.6396954062116946,
+    "min_sl_dist_usd": 0.5020127916095589,
+    "avg_R": 0.785470515033917,
+    "median_R": 0.9865677167318421,
+    "cum_R": 3592.742135765136
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0,
+    "MAX_NOTIONAL_USD": 500000.0,
+    "DISABLE_TP": true,
+    "N_EXIT_TP": 0
+  },
+  "costs": {
+    "USE_SPREAD_COST": true,
+    "SPREAD_USD": 0.2,
+    "USE_SLIPPAGE": true,
+    "SLIPPAGE_ENTRY_ATR_MULT": 0.02,
+    "SLIPPAGE_EXIT_ATR_MULT": 0.02,
+    "USE_MTM_WORST_DD": true
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-12T18:28:04.995450+00:00"
+}
