@@ -416,6 +416,11 @@ def detect_and_log_close(current_pos: Optional[mt5.TradePosition]):
             if tr_sl > 0 and abs(close_price - tr_sl) <= 1.0:  # 1.0 USD tolerance
                 final_reason = "TRAIL_SL"
 
+    slippage = None
+    if base_reason in ("SL", "TRAIL_SL"):
+        if _last_pos_sl and _last_pos_sl > 0:
+            slippage = round(close_price - _last_pos_sl, 3)
+
     log_event(
         "CLOSE_OUT",
         ticket=ticket,
@@ -426,6 +431,7 @@ def detect_and_log_close(current_pos: Optional[mt5.TradePosition]):
         profit=round(profit, 2),
         volume=volume,
         base_reason=base_reason,
+        slippage=slippage,
     )
 
     # clear last position state (we already logged close)

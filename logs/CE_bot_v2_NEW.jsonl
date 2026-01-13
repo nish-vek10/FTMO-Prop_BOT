@@ -151,3 +151,12 @@
 {"ts_utc": "2026-01-13T19:00:01.617816+00:00", "event": "DEBUG_CLOSE_ARMED", "last_ticket": 1407331688, "last_side": "BUY"}
 {"ts_utc": "2026-01-13T19:00:01.618846+00:00", "event": "BAR", "time": "2026-01-13 18:55:00+00:00", "signal": null, "open_side": "BUY", "chand_long": 4627.59, "chand_short": 4580.905}
 {"ts_utc": "2026-01-13T19:00:01.618846+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "BUY", "signal": null}
+{"ts_utc": "2026-01-13T19:05:00.578365+00:00", "event": "CLOSE_OUT", "ticket": 1407331688, "side": "BUY", "reason": "UNKNOWN", "msg": "No deal found in history window"}
+{"ts_utc": "2026-01-13T19:05:00.579493+00:00", "event": "BAR", "time": "2026-01-13 19:00:00+00:00", "signal": "SELL", "open_side": null, "chand_long": 4627.272, "chand_short": 4581.223}
+{"ts_utc": "2026-01-13T19:05:00.579493+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": "SELL"}
+{"ts_utc": "2026-01-13T19:05:00.580553+00:00", "event": "DEBUG_SIGNAL_BRANCH", "desired": "SELL", "pos_found": false, "open_side": null}
+{"ts_utc": "2026-01-13T19:05:00.580553+00:00", "event": "ENTRY_PRECHECK", "side": "SELL", "entry_px": 4587.66, "sl": 4595.278, "tp": 4576.233, "sl_valid": true, "sl_dist": 7.618}
+{"ts_utc": "2026-01-13T19:05:00.966084+00:00", "event": "ENTRY", "ok": true, "side": "SELL", "lots": 0.65, "price": 4587.66, "sl": 4595.278325833115, "tp": 4576.232511250328, "retcode": 10009, "comment": "Request executed", "sizing": {"risk_amount": 500.0, "base_equity": 100000.0, "v_per_1usd": 100.0, "raw_lots": 0.656312175342561, "lots": 0.65, "capped_notional": false}}
+{"ts_utc": "2026-01-13T19:05:01.267871+00:00", "event": "DEBUG_CLOSE_ARMED", "last_ticket": 1407368820, "last_side": "SELL"}
+{"ts_utc": "2026-01-13T19:05:01.267871+00:00", "event": "SET_SLTP_TRY", "ticket": 1407368820, "try_n": 1, "ok": true, "sl": 4595.278325833115, "tp": 4576.232511250328, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T19:05:01.268956+00:00", "event": "SET_SLTP", "ok": true, "ticket": 1407368820, "sl": 4595.278325833115, "tp": 4576.232511250328}
