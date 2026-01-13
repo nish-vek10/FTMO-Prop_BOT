@@ -785,6 +785,7 @@ def update_trailing_sl(pos: mt5.TradePosition, siginfo: SignalInfo):
 
 
 def main_loop():
+    global _last_pos_ticket, _last_pos_side, _last_pos_sl, _last_pos_tp
     mt5_init_or_die()
     last_bar_time: Optional[pd.Timestamp] = None
 
@@ -839,7 +840,6 @@ def main_loop():
         if pos:
             open_side = "BUY" if pos.type == mt5.POSITION_TYPE_BUY else "SELL"
 
-        global _last_pos_ticket, _last_pos_side, _last_pos_sl, _last_pos_tp
         if pos:
             _last_pos_ticket = int(pos.ticket)
             _last_pos_side = open_side

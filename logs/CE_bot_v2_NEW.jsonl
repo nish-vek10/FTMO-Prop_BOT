@@ -93,3 +93,14 @@
 {"ts_utc": "2026-01-13T17:35:28.642411+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
 {"ts_utc": "2026-01-13T17:40:03.317461+00:00", "event": "BAR", "time": "2026-01-13 17:35:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.796, "chand_short": 4580.699}
 {"ts_utc": "2026-01-13T17:40:03.561808+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T17:45:01.846287+00:00", "event": "BAR", "time": "2026-01-13 17:40:00+00:00", "signal": "SELL", "open_side": null, "chand_long": 4627.831, "chand_short": 4580.664}
+{"ts_utc": "2026-01-13T17:45:01.852271+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": "SELL"}
+{"ts_utc": "2026-01-13T17:45:01.853268+00:00", "event": "DEBUG_SIGNAL_BRANCH", "desired": "SELL", "pos_found": false, "open_side": null}
+{"ts_utc": "2026-01-13T17:45:01.873217+00:00", "event": "ENTRY_PRECHECK", "side": "SELL", "entry_px": 4604.6, "sl": 4611.659, "tp": 4594.011, "sl_valid": true, "sl_dist": 7.059}
+{"ts_utc": "2026-01-13T17:45:02.644193+00:00", "event": "ENTRY", "ok": true, "side": "SELL", "lots": 0.7000000000000001, "price": 4604.6, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10009, "comment": "Request executed", "sizing": {"risk_amount": 500.0, "base_equity": 100000.0, "v_per_1usd": 100.0, "raw_lots": 0.7083050487341782, "lots": 0.7000000000000001, "capped_notional": false}}
+{"ts_utc": "2026-01-13T17:45:02.945620+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 1, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T17:45:03.310463+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 2, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T17:45:03.697368+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 3, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T17:45:04.100805+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 4, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T17:45:04.452186+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 5, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T17:45:04.803744+00:00", "event": "SET_SLTP", "ok": false, "ticket": 1407208441, "sl": 4611.659105407954, "tp": 4594.01134188807}
