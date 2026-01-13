@@ -333,11 +333,12 @@ def _best_close_deal_for_ticket(ticket: int):
     """
     Fetch recent deals and return the most recent OUT deal for this position ticket.
     """
-    # Look back a bit; tight window is fine because we only call this on a close event.
-    t_to = datetime.now(timezone.utc)
-    t_from = t_to - timedelta(hours=6)
+    # IMPORTANT: MT5 python API is most reliable with naive datetimes (terminal/local time)
+    t_to = datetime.now()
+    t_from = t_to - timedelta(hours=12)
 
     deals = mt5.history_deals_get(t_from, t_to)
+
     if deals is None or len(deals) == 0:
         return None
 
@@ -349,8 +350,12 @@ def _best_close_deal_for_ticket(ticket: int):
             continue
         if int(getattr(d, "magic", 0) or 0) != int(MAGIC_NUMBER):
             continue
+
         pos_id = int(getattr(d, "position_id", 0) or 0)
-        if pos_id != int(ticket):
+        order_id = int(getattr(d, "order", 0) or 0)
+
+        # Some brokers link closes by position_id, others by order id.
+        if pos_id != int(ticket) and order_id != int(ticket):
             continue
 
         entry = getattr(d, "entry", None)
@@ -501,7 +506,13 @@ def modify_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float]
     }
 
     res = mt5.order_send(req)
-    ok = res is not None and res.retcode == mt5.TRADE_RETCODE_DONE
+    if res is None:
+        return False, res
+
+    rc = int(getattr(res, "retcode", -1) or -1)
+    # 10009 = DONE, 10025 = NO_CHANGES
+    ok = rc in (10009, 10025)
+
     return ok, res
 
 def ensure_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float], retries: int = 5) -> bool:
@@ -637,10 +648,19 @@ def place_market(side: str, sl: float, tp: Optional[float]) -> bool:
         return False
 
     time.sleep(0.3)
+
     pos = get_our_position()
     if not pos:
         log_event("WARN", msg="position not visible after entry; will retry SLTP later")
         return True
+
+    # Arm close detector immediately after entry (so fast closes still get logged)
+    global _last_pos_ticket, _last_pos_side, _last_pos_sl, _last_pos_tp
+    _last_pos_ticket = int(pos.ticket)
+    _last_pos_side = "BUY" if pos.type == mt5.POSITION_TYPE_BUY else "SELL"
+    _last_pos_sl = float(getattr(pos, "sl", 0.0) or 0.0)
+    _last_pos_tp = float(getattr(pos, "tp", 0.0) or 0.0)
+    log_event("DEBUG_CLOSE_ARMED", last_ticket=_last_pos_ticket, last_side=_last_pos_side)
 
     ok2 = ensure_sltp(pos, sl=sl, tp=tp, retries=5)
     log_event("SET_SLTP", ok=ok2, ticket=pos.ticket, sl=sl, tp=tp)
@@ -845,6 +865,7 @@ def main_loop():
             _last_pos_side = open_side
             _last_pos_sl = float(getattr(pos, "sl", 0.0) or 0.0)
             _last_pos_tp = float(getattr(pos, "tp", 0.0) or 0.0)
+            log_event("DEBUG_CLOSE_ARMED", last_ticket=_last_pos_ticket, last_side=_last_pos_side)
 
         # log bar summary (no spam: once per bar)
         log_event(

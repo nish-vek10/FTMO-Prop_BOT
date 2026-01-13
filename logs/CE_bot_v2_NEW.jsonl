@@ -104,3 +104,50 @@
 {"ts_utc": "2026-01-13T17:45:04.100805+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 4, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
 {"ts_utc": "2026-01-13T17:45:04.452186+00:00", "event": "SET_SLTP_TRY", "ticket": 1407208441, "try_n": 5, "ok": false, "sl": 4611.659105407954, "tp": 4594.01134188807, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
 {"ts_utc": "2026-01-13T17:45:04.803744+00:00", "event": "SET_SLTP", "ok": false, "ticket": 1407208441, "sl": 4611.659105407954, "tp": 4594.01134188807}
+{"ts_utc": "2026-01-13T17:50:01.183269+00:00", "event": "BAR", "time": "2026-01-13 17:45:00+00:00", "signal": null, "open_side": "SELL", "chand_long": 4627.85, "chand_short": 4580.645}
+{"ts_utc": "2026-01-13T17:50:01.200223+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "SELL", "signal": null}
+{"ts_utc": "2026-01-13T17:55:01.401851+00:00", "event": "BAR", "time": "2026-01-13 17:50:00+00:00", "signal": null, "open_side": "SELL", "chand_long": 4627.744, "chand_short": 4580.751}
+{"ts_utc": "2026-01-13T17:55:01.401851+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "SELL", "signal": null}
+{"ts_utc": "2026-01-13T18:00:01.739650+00:00", "event": "BAR", "time": "2026-01-13 17:55:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.275, "chand_short": 4581.22}
+{"ts_utc": "2026-01-13T18:00:01.739650+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:05:00.771295+00:00", "event": "BAR", "time": "2026-01-13 18:00:00+00:00", "signal": null, "open_side": null, "chand_long": 4626.996, "chand_short": 4581.499}
+{"ts_utc": "2026-01-13T18:05:00.772600+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:10:01.753551+00:00", "event": "BAR", "time": "2026-01-13 18:05:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.004, "chand_short": 4581.491}
+{"ts_utc": "2026-01-13T18:10:01.754549+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:15:00.871226+00:00", "event": "BAR", "time": "2026-01-13 18:10:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.21, "chand_short": 4581.285}
+{"ts_utc": "2026-01-13T18:15:00.871226+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:20:00.548306+00:00", "event": "BAR", "time": "2026-01-13 18:15:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.033, "chand_short": 4581.462}
+{"ts_utc": "2026-01-13T18:20:00.548306+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:25:01.608599+00:00", "event": "BAR", "time": "2026-01-13 18:20:00+00:00", "signal": null, "open_side": null, "chand_long": 4626.914, "chand_short": 4581.581}
+{"ts_utc": "2026-01-13T18:25:01.608599+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:30:01.671231+00:00", "event": "BAR", "time": "2026-01-13 18:25:00+00:00", "signal": null, "open_side": null, "chand_long": 4626.99, "chand_short": 4581.505}
+{"ts_utc": "2026-01-13T18:30:01.671231+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:35:01.444094+00:00", "event": "BAR", "time": "2026-01-13 18:30:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.118, "chand_short": 4581.377}
+{"ts_utc": "2026-01-13T18:35:01.444094+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:40:01.626440+00:00", "event": "BAR", "time": "2026-01-13 18:35:00+00:00", "signal": null, "open_side": null, "chand_long": 4627.079, "chand_short": 4581.416}
+{"ts_utc": "2026-01-13T18:40:01.627455+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": null}
+{"ts_utc": "2026-01-13T18:45:00.974498+00:00", "event": "BAR", "time": "2026-01-13 18:40:00+00:00", "signal": "BUY", "open_side": null, "chand_long": 4627.122, "chand_short": 4581.373}
+{"ts_utc": "2026-01-13T18:45:00.975510+00:00", "event": "DEBUG_STATE", "pos_found": false, "open_side": null, "signal": "BUY"}
+{"ts_utc": "2026-01-13T18:45:00.976560+00:00", "event": "DEBUG_SIGNAL_BRANCH", "desired": "BUY", "pos_found": false, "open_side": null}
+{"ts_utc": "2026-01-13T18:45:00.977664+00:00", "event": "ENTRY_PRECHECK", "side": "BUY", "entry_px": 4600.54, "sl": 4592.772, "tp": 4612.191, "sl_valid": true, "sl_dist": 7.768}
+{"ts_utc": "2026-01-13T18:45:01.339200+00:00", "event": "ENTRY", "ok": true, "side": "BUY", "lots": 0.64, "price": 4600.54, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10009, "comment": "Request executed", "sizing": {"risk_amount": 500.0, "base_equity": 100000.0, "v_per_1usd": 100.0, "raw_lots": 0.6436963939969782, "lots": 0.64, "capped_notional": false}}
+{"ts_utc": "2026-01-13T18:45:01.640987+00:00", "event": "SET_SLTP_TRY", "ticket": 1407331688, "try_n": 1, "ok": false, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T18:45:01.992152+00:00", "event": "SET_SLTP_TRY", "ticket": 1407331688, "try_n": 2, "ok": false, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T18:45:02.342999+00:00", "event": "SET_SLTP_TRY", "ticket": 1407331688, "try_n": 3, "ok": false, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T18:45:02.694325+00:00", "event": "SET_SLTP_TRY", "ticket": 1407331688, "try_n": 4, "ok": false, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T18:45:03.045821+00:00", "event": "SET_SLTP_TRY", "ticket": 1407331688, "try_n": 5, "ok": false, "sl": 4592.772362886247, "tp": 4612.19145567063, "retcode": 10025, "comment": "No changes", "last_error": "(1, 'Success')"}
+{"ts_utc": "2026-01-13T18:45:03.397310+00:00", "event": "SET_SLTP", "ok": false, "ticket": 1407331688, "sl": 4592.772362886247, "tp": 4612.19145567063}
+{"ts_utc": "2026-01-13T18:50:01.393409+00:00", "event": "BAR", "time": "2026-01-13 18:45:00+00:00", "signal": null, "open_side": "BUY", "chand_long": 4627.244, "chand_short": 4581.251}
+{"ts_utc": "2026-01-13T18:50:01.414353+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "BUY", "signal": null}
+{"ts_utc": "2026-01-13T18:54:12.986996+00:00", "event": "BOT_STOP", "reason": "KeyboardInterrupt"}
+{"ts_utc": "2026-01-13T18:54:17.795378+00:00", "event": "MT5_CONNECTED", "login": 52683668, "balance": 99609.0, "equity": 99574.44}
+{"ts_utc": "2026-01-13T18:54:17.795811+00:00", "event": "BOT_START", "symbol": "XAUUSD", "risk_pct": 0.5, "dynamic_risk": false, "disable_tp": false, "tp_r": 1.5, "ch_atr_period": 20, "ch_atr_mult": 1.0, "ch_lookback": 220, "ce_atr_period": 1, "ce_atr_mult": 1.85, "stop_buffer": 2.0, "notional_cap": true, "max_notional": 500000.0}
+{"ts_utc": "2026-01-13T18:54:18.250941+00:00", "event": "DEBUG_CLOSE_ARMED", "last_ticket": 1407331688, "last_side": "BUY"}
+{"ts_utc": "2026-01-13T18:54:18.251081+00:00", "event": "BAR", "time": "2026-01-13 18:45:00+00:00", "signal": null, "open_side": "BUY", "chand_long": 4627.244, "chand_short": 4581.251}
+{"ts_utc": "2026-01-13T18:54:18.251081+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "BUY", "signal": null}
+{"ts_utc": "2026-01-13T18:55:00.887133+00:00", "event": "DEBUG_CLOSE_ARMED", "last_ticket": 1407331688, "last_side": "BUY"}
+{"ts_utc": "2026-01-13T18:55:00.887133+00:00", "event": "BAR", "time": "2026-01-13 18:50:00+00:00", "signal": null, "open_side": "BUY", "chand_long": 4627.493, "chand_short": 4581.002}
+{"ts_utc": "2026-01-13T18:55:00.888360+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "BUY", "signal": null}
+{"ts_utc": "2026-01-13T19:00:01.617816+00:00", "event": "DEBUG_CLOSE_ARMED", "last_ticket": 1407331688, "last_side": "BUY"}
+{"ts_utc": "2026-01-13T19:00:01.618846+00:00", "event": "BAR", "time": "2026-01-13 18:55:00+00:00", "signal": null, "open_side": "BUY", "chand_long": 4627.59, "chand_short": 4580.905}
+{"ts_utc": "2026-01-13T19:00:01.618846+00:00", "event": "DEBUG_STATE", "pos_found": true, "open_side": "BUY", "signal": null}
