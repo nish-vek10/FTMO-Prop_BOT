@@ -13,8 +13,7 @@ ENTRY (signal engine):
 
 EXIT / MANAGEMENT:
 - Chandelier stop for trailing:
-    atr_period=20, atr_init_mult=1.0, chan_lookback=180
-- SL is set on entry using Chandelier stop value at signal bar (fallback to ATR*mult if needed)
+    atr_period=20, atr_init_mult=1.0, chan_lookback=220
 - Trailing SL updated on each new bar close (favorable-only)
 - TP optional: tp_r * SL_dist (TP_R=1.5) unless DISABLE_TP=True
 - Flip on opposite signal: close existing position then open new one
@@ -84,20 +83,21 @@ CE_ATR_MULT = 1.85
 # Chandelier exit (champ parameters)
 CH_ATR_PERIOD = 20
 CH_ATR_MULT = 1.0
-CH_LOOKBACK = 180
+CH_LOOKBACK = 220
 
 TP_R = 1.5
 DISABLE_TP = False
 
 # ---- Realism guards (same spirit as backtest) ----
 MIN_SL_DIST_USD = 0.50
+STOP_BUFFER_USD = 2.00  # backtest realism (min executable stop distance)
 
 USE_NOTIONAL_CAP = True
 MAX_NOTIONAL_USD = 500_000.0
 
 # ---- Risk ----
 INITIAL_BALANCE_FOR_STATIC = 100_000.0
-RISK_PCT_PER_TRADE = 0.25
+RISK_PCT_PER_TRADE = 0.50
 DYNAMIC_RISK = False        # False = % of INITIAL_BALANCE_FOR_STATIC ; True = % of equity
 
 # ---- Execution ----
@@ -110,7 +110,7 @@ ORDER_TIME_TYPE = mt5.ORDER_TIME_GTC
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-JSONL_LOG_PATH = LOG_DIR / "CE_bot_v2.jsonl"
+JSONL_LOG_PATH = LOG_DIR / "CE_bot_v2_NEW.jsonl"
 
 # Only log trailing SL changes if change >= this (price units, XAU USD)
 SL_LOG_MIN_DELTA_USD = 0.5
@@ -345,7 +345,7 @@ def close_position(pos: mt5.TradePosition) -> bool:
     log_event("CLOSE", ok=ok, retcode=getattr(res, "retcode", None), comment=getattr(res, "comment", None), ticket=pos.ticket)
     return ok
 
-def modify_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float]) -> bool:
+def modify_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float]) -> Tuple[bool, object]:
     req = {
         "action": mt5.TRADE_ACTION_SLTP,
         "symbol": MT5_SYMBOL,
@@ -355,9 +355,29 @@ def modify_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float]
         "magic": MAGIC_NUMBER,
         "comment": "CE_CHAN_SLTP",
     }
+
     res = mt5.order_send(req)
     ok = res is not None and res.retcode == mt5.TRADE_RETCODE_DONE
-    return ok
+    return ok, res
+
+def ensure_sltp(pos: mt5.TradePosition, sl: Optional[float], tp: Optional[float], retries: int = 5) -> bool:
+    for i in range(retries):
+        ok, res = modify_sltp(pos, sl=sl, tp=tp)
+        log_event(
+            "SET_SLTP_TRY",
+            ticket=pos.ticket,
+            try_n=i + 1,
+            ok=ok,
+            sl=sl,
+            tp=tp,
+            retcode=getattr(res, "retcode", None),
+            comment=getattr(res, "comment", None),
+            last_error=str(mt5.last_error()),
+        )
+        if ok:
+            return True
+        time.sleep(0.35)
+    return False
 
 def _round_to_step(x: float, step: float) -> float:
     if step <= 0:
@@ -438,9 +458,10 @@ def place_market(side: str, sl: float, tp: Optional[float]) -> bool:
     order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
     price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
 
+    min_stop = max(MIN_SL_DIST_USD, STOP_BUFFER_USD)
     sl_dist = abs(price - sl)
-    if sl_dist < MIN_SL_DIST_USD:
-        log_event("SKIP_ENTRY_MIN_SL", side=side, sl_dist=sl_dist)
+    if sl_dist < min_stop:
+        log_event("SKIP_ENTRY_MIN_STOP", side=side, sl_dist=round(sl_dist, 3), min_stop=min_stop)
         return False
 
     lots, dbg = lots_for_risk(sl_dist_usd=sl_dist, entry_price=price)
@@ -459,7 +480,11 @@ def place_market(side: str, sl: float, tp: Optional[float]) -> bool:
         "comment": "CE_CHAN_ENTRY",
         "type_time": ORDER_TIME_TYPE,
         "type_filling": ORDER_FILLING,
+        # attach SL/TP at entry (broker-friendly)
+        "sl": float(sl),
+        "tp": float(tp) if (tp is not None) else 0.0,
     }
+
     res = mt5.order_send(req)
     ok = res is not None and res.retcode == mt5.TRADE_RETCODE_DONE
     log_event("ENTRY", ok=ok, side=side, lots=lots, price=price, sl=sl, tp=tp, retcode=getattr(res, "retcode", None), comment=getattr(res, "comment", None), sizing=dbg)
@@ -473,8 +498,9 @@ def place_market(side: str, sl: float, tp: Optional[float]) -> bool:
         log_event("WARN", msg="position not visible after entry; will retry SLTP later")
         return True
 
-    ok2 = modify_sltp(pos, sl=sl, tp=tp)
+    ok2 = ensure_sltp(pos, sl=sl, tp=tp, retries=5)
     log_event("SET_SLTP", ok=ok2, ticket=pos.ticket, sl=sl, tp=tp)
+
     return True
 
 
@@ -527,27 +553,36 @@ def build_signals(df: pd.DataFrame) -> Optional[SignalInfo]:
 
 def desired_sl_for_entry(side: str, entry_price: float, siginfo: SignalInfo) -> float:
     """
-    Match backtest: use chandelier stop value at signal bar if finite, else fallback to ATR*mult.
+    Backtest-aligned ATR-entry stop:
+      dist = max(min_stop, CH_ATR_MULT * atr_ch)
+      BUY  -> entry - dist
+      SELL -> entry + dist
+
+    Note: CH_ATR_MULT=1.0 and atr_ch is ATR(20) built from HA (if enabled), same as backtest.
     """
+    min_stop = max(MIN_SL_DIST_USD, STOP_BUFFER_USD)
+
+    atr_dist = float(CH_ATR_MULT) * float(siginfo.atr_ch or 0.0)
+    dist = max(min_stop, atr_dist)
+
     if side == "BUY":
-        ch = siginfo.chand_long
-        if np.isfinite(ch):
-            return float(ch)
-        # fallback
-        dist = max(1e-9, float(CH_ATR_MULT) * float(siginfo.atr_ch))
-        return entry_price - dist
+        return float(entry_price - dist)
     else:
-        ch = siginfo.chand_short
-        if np.isfinite(ch):
-            return float(ch)
-        dist = max(1e-9, float(CH_ATR_MULT) * float(siginfo.atr_ch))
-        return entry_price + dist
+        return float(entry_price + dist)
 
 def tp_for_entry(side: str, entry_price: float, sl_price: float) -> Optional[float]:
     if DISABLE_TP:
         return None
+
+    min_stop = max(MIN_SL_DIST_USD, STOP_BUFFER_USD)
+
     sl_dist = abs(entry_price - sl_price)
     tp_dist = float(TP_R) * sl_dist
+
+    # If TP would be too close (rare now, but keep parity-safe)
+    if tp_dist < min_stop:
+        return None
+
     return entry_price + tp_dist if side == "BUY" else entry_price - tp_dist
 
 def update_trailing_sl(pos: mt5.TradePosition, siginfo: SignalInfo):
@@ -596,7 +631,8 @@ def update_trailing_sl(pos: mt5.TradePosition, siginfo: SignalInfo):
     else:
         tp_val = tp if tp > 0 else None
 
-    ok = modify_sltp(pos, sl=new_sl, tp=tp_val)
+    ok = ensure_sltp(pos, sl=new_sl, tp=tp_val, retries=3)
+
     if ok:
         log_event("TRAIL_SL", ticket=pos.ticket, side=side, old_sl=current_sl, new_sl=new_sl)
     else:
@@ -618,6 +654,7 @@ def main_loop():
         ch_lookback=CH_LOOKBACK,
         ce_atr_period=CE_ATR_PERIOD,
         ce_atr_mult=CE_ATR_MULT,
+        stop_buffer=STOP_BUFFER_USD,
         notional_cap=USE_NOTIONAL_CAP,
         max_notional=MAX_NOTIONAL_USD,
     )
@@ -680,9 +717,37 @@ def main_loop():
                 sl = desired_sl_for_entry(desired, entry_px, siginfo)
                 tp = tp_for_entry(desired, entry_px, sl)
 
-                # enforce min SL dist
-                if abs(entry_px - sl) < MIN_SL_DIST_USD:
-                    log_event("SKIP_ENTRY_MIN_SL", side=desired, sl_dist=abs(entry_px - sl))
+                # --- diagnostics: is SL on the correct side? ---
+                sl_valid = None
+                if desired == "BUY":
+                    sl_valid = (sl < entry_px)
+                else:
+                    sl_valid = (sl > entry_px)
+
+                log_event(
+                    "ENTRY_PRECHECK",
+                    side=desired,
+                    entry_px=round(entry_px, 3),
+                    sl=round(sl, 3),
+                    tp=(None if tp is None else round(tp, 3)),
+                    sl_valid=bool(sl_valid),
+                    sl_dist=round(abs(entry_px - sl), 3),
+                )
+
+                min_stop = max(MIN_SL_DIST_USD, STOP_BUFFER_USD)
+
+                # enforce min executable SL dist (backtest parity)
+                if abs(entry_px - sl) < min_stop:
+                    bt = siginfo.bar_time
+                    log_event(
+                        "SKIP_ENTRY_MIN_STOP",
+                        side=desired,
+                        bar_time=str(bt),
+                        dow=int(bt.dayofweek),
+                        hour=int(bt.hour),
+                        sl_dist=round(abs(entry_px - sl), 3),
+                        min_stop=min_stop,
+                    )
                     continue
 
                 place_market(desired, sl=sl, tp=tp)

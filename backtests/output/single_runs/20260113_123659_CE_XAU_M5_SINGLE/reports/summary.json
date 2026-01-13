@@ -1,0 +1,101 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.0,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 180,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 4284,
+    "winners": 4093,
+    "win_rate": 95.54154995331466,
+    "initialBalance": 100000.0,
+    "finalEquity": 10454869.635471733,
+    "netpnl": 10354869.635471733,
+    "netpnl_pct": 10354.869635471734,
+    "max_dd_pct": -1.0071927535496423,
+    "avgpnl": 2417.103089512543,
+    "profit_factor": 225.899360586914,
+    "expectancy": 2417.103089512543,
+    "maxWinsStreak": 121,
+    "maxLossesStreak": 2,
+    "max_streak_loss_cash": -712.6834671915699,
+    "max_streak_profit_cash": 373165.7737390017,
+    "skipped_min_sl": 469,
+    "avg_lots": 1.285705130589066,
+    "p95_lots": 1.770478190408168,
+    "max_lots": 1.9018087807069244,
+    "pct_lots_capped": 0.0,
+    "pct_notional_capped": 54.36507936507936,
+    "avg_notional_usd": 438368.87125340756,
+    "p95_notional_usd": 500000.00000000006,
+    "max_notional_usd": 500000.00000000006,
+    "avg_sl_dist_usd": 3.8332532118580365,
+    "p10_sl_dist_usd": 1.8683181342370825,
+    "min_sl_dist_usd": 1.500191012602086,
+    "avg_R": 5.69943432122776,
+    "median_R": 4.662431124279268,
+    "cum_R": 24416.376632139723,
+    "by_entry_type": {
+      "CH_VALID": {
+        "trades": 211,
+        "win_rate": 26.540284360189574,
+        "avg_pnl": -116.16319975539645,
+        "cum_pnl": -24510.43514838865,
+        "avg_R": -0.27955838014338824,
+        "cum_R": -58.986818210254924
+      },
+      "ATR_FALLBACK": {
+        "trades": 4073,
+        "win_rate": 99.11613061625337,
+        "avg_pnl": 2548.337851858611,
+        "cum_pnl": 10379380.070620123,
+        "avg_R": 6.009173447176523,
+        "cum_R": 24475.363450349978
+      }
+    }
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0,
+    "MAX_NOTIONAL_USD": 500000.0,
+    "DISABLE_TP": false,
+    "N_EXIT_TP": 26
+  },
+  "chandelier_diag": {
+    "ch_nan_count": 0,
+    "ch_invalid_side_count": 0,
+    "ch_fallback_used_count": 0,
+    "ch_fallback_if_invalid_side": false,
+    "skipped_invalid_ch_side": 0,
+    "skipped_ch_nan": 0,
+    "skip_entry_if_invalid_ch_side": false,
+    "allow_atr_fallback_if_ch_nan": false,
+    "atr_entry_ch_trail_only": false,
+    "hybrid_enabled": true,
+    "hybrid_used_ch_valid": 420,
+    "hybrid_used_atr_fallback": 4333,
+    "hybrid_seen_invalid_side": 4315,
+    "hybrid_seen_nan": 18
+  },
+  "costs": {
+    "USE_SPREAD_COST": true,
+    "SPREAD_USD": 0.2,
+    "USE_SLIPPAGE": true,
+    "SLIPPAGE_ENTRY_ATR_MULT": 0.05,
+    "SLIPPAGE_EXIT_ATR_MULT": 0.05,
+    "USE_MTM_WORST_DD": true
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-13T12:37:15.575758+00:00"
+}

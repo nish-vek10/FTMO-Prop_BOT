@@ -1,0 +1,93 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.0,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 140,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 3892,
+    "winners": 3542,
+    "win_rate": 91.00719424460432,
+    "initialBalance": 100000.0,
+    "finalEquity": 7890843.470018775,
+    "netpnl": 7790843.470018775,
+    "netpnl_pct": 7790.843470018775,
+    "max_dd_pct": -0.8732167562604658,
+    "avgpnl": 2001.758342759191,
+    "profit_factor": 126.19271168615532,
+    "expectancy": 2001.758342759191,
+    "maxWinsStreak": 85,
+    "maxLossesStreak": 2,
+    "max_streak_loss_cash": -543.1710321104879,
+    "max_streak_profit_cash": 221685.1106988662,
+    "skipped_min_sl": 861,
+    "avg_lots": 1.2332639474319371,
+    "p95_lots": 1.7254888432794666,
+    "max_lots": 1.8992498516732377,
+    "pct_lots_capped": 0.0,
+    "pct_notional_capped": 46.60842754367934,
+    "avg_notional_usd": 427612.1472593853,
+    "p95_notional_usd": 500000.00000000006,
+    "max_notional_usd": 500000.00000000006,
+    "avg_sl_dist_usd": 4.175949225831112,
+    "p10_sl_dist_usd": 2.2790067744161653,
+    "min_sl_dist_usd": 2.000094536109148,
+    "avg_R": 4.445524690590023,
+    "median_R": 3.5277371118512324,
+    "cum_R": 17301.98209577637,
+    "by_entry_type": {
+      "ATR_FALLBACK": {
+        "trades": 3892,
+        "win_rate": 91.00719424460432,
+        "avg_pnl": 2001.758342759191,
+        "cum_pnl": 7790843.4700187715,
+        "avg_R": 4.445524690590023,
+        "cum_R": 17301.98209577637
+      }
+    }
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0,
+    "MAX_NOTIONAL_USD": 500000.0,
+    "DISABLE_TP": false,
+    "N_EXIT_TP": 11
+  },
+  "chandelier_diag": {
+    "ch_nan_count": 0,
+    "ch_invalid_side_count": 0,
+    "ch_fallback_used_count": 0,
+    "ch_fallback_if_invalid_side": false,
+    "skipped_invalid_ch_side": 0,
+    "skipped_ch_nan": 0,
+    "skip_entry_if_invalid_ch_side": false,
+    "allow_atr_fallback_if_ch_nan": false,
+    "atr_entry_ch_trail_only": true,
+    "hybrid_enabled": false,
+    "hybrid_used_ch_valid": 0,
+    "hybrid_used_atr_fallback": 0,
+    "hybrid_seen_invalid_side": 0,
+    "hybrid_seen_nan": 0
+  },
+  "costs": {
+    "USE_SPREAD_COST": true,
+    "SPREAD_USD": 0.2,
+    "USE_SLIPPAGE": true,
+    "SLIPPAGE_ENTRY_ATR_MULT": 0.05,
+    "SLIPPAGE_EXIT_ATR_MULT": 0.05,
+    "USE_MTM_WORST_DD": true
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-13T13:17:02.749817+00:00"
+}

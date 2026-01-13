@@ -1,0 +1,3 @@
+{"ts_utc": "2026-01-13T14:00:00.602022+00:00", "event": "MT5_CONNECTED", "login": 52683668, "balance": 99418.12, "equity": 99418.12}
+{"ts_utc": "2026-01-13T14:00:00.602022+00:00", "event": "BOT_START", "symbol": "XAUUSD", "risk_pct": 0.5, "dynamic_risk": false, "disable_tp": false, "tp_r": 1.5, "ch_atr_period": 20, "ch_atr_mult": 1.0, "ch_lookback": 220, "ce_atr_period": 1, "ce_atr_mult": 1.85, "stop_buffer": 2.0, "notional_cap": true, "max_notional": 500000.0}
+{"ts_utc": "2026-01-13T14:00:01.041248+00:00", "event": "BAR", "time": "2026-01-13 13:55:00+00:00", "signal": null, "open_side": null, "chand_long": 4614.826, "chand_short": 4579.945}

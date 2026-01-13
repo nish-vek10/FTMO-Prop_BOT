@@ -1,0 +1,77 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.0,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 180,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 350,
+    "winners": 90,
+    "win_rate": 25.71428571428571,
+    "initialBalance": 100000.0,
+    "finalEquity": 67231.71577523179,
+    "netpnl": -32768.28422476821,
+    "netpnl_pct": -32.768284224768216,
+    "max_dd_pct": -33.588879812062956,
+    "avgpnl": -93.62366921362371,
+    "profit_factor": 0.456575017967974,
+    "expectancy": -93.62366921362376,
+    "maxWinsStreak": 4,
+    "maxLossesStreak": 16,
+    "max_streak_loss_cash": -4570.451934598801,
+    "max_streak_profit_cash": 1875.4496161984898,
+    "skipped_min_sl": 70,
+    "avg_lots": 1.4208428234742558,
+    "p95_lots": 1.8323081765612124,
+    "max_lots": 1.8942682498394496,
+    "pct_lots_capped": 0.0,
+    "pct_notional_capped": 80.85714285714286,
+    "avg_notional_usd": 481352.1488818443,
+    "p95_notional_usd": 500000.00000000006,
+    "max_notional_usd": 500000.00000000006,
+    "avg_sl_dist_usd": 2.284827885622673,
+    "p10_sl_dist_usd": 0.7747861986593761,
+    "min_sl_dist_usd": 0.5127571981633992,
+    "avg_R": -0.34819313357842485,
+    "median_R": -0.6975857363960958,
+    "cum_R": -121.8675967524487
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0,
+    "MAX_NOTIONAL_USD": 500000.0,
+    "DISABLE_TP": false,
+    "N_EXIT_TP": 36
+  },
+  "chandelier_diag": {
+    "ch_nan_count": 0,
+    "ch_invalid_side_count": 0,
+    "ch_fallback_used_count": 0,
+    "ch_fallback_if_invalid_side": false,
+    "skipped_invalid_ch_side": 4315,
+    "skipped_ch_nan": 18,
+    "skip_entry_if_invalid_ch_side": true,
+    "allow_atr_fallback_if_ch_nan": false
+  },
+  "costs": {
+    "USE_SPREAD_COST": true,
+    "SPREAD_USD": 0.2,
+    "USE_SLIPPAGE": true,
+    "SLIPPAGE_ENTRY_ATR_MULT": 0.05,
+    "SLIPPAGE_EXIT_ATR_MULT": 0.05,
+    "USE_MTM_WORST_DD": true
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-13T11:21:55.033797+00:00"
+}

@@ -1,0 +1,73 @@
+{
+  "scenario": {
+    "stop_mode": "chandelier",
+    "atr_period": 20,
+    "atr_init_mult": 1.0,
+    "tp_r": 1.5,
+    "trail_start_r": 0.0,
+    "atr_trail_mult": 0.0,
+    "chan_lookback": 180,
+    "max_hold_bars": null,
+    "dynamic_risk": false
+  },
+  "summary": {
+    "trades": 4683,
+    "winners": 4381,
+    "win_rate": 93.5511424300662,
+    "initialBalance": 100000.0,
+    "finalEquity": 10950339.169444447,
+    "netpnl": 10850339.169444447,
+    "netpnl_pct": 10850.339169444447,
+    "max_dd_pct": -1.0419721674699784,
+    "avgpnl": 2316.9633075901024,
+    "profit_factor": 170.95468224040343,
+    "expectancy": 2316.963307590102,
+    "maxWinsStreak": 109,
+    "maxLossesStreak": 3,
+    "max_streak_loss_cash": -866.4013720531241,
+    "max_streak_profit_cash": 315535.23189562897,
+    "skipped_min_sl": 70,
+    "avg_lots": 1.3158209646006442,
+    "p95_lots": 1.8170645052368746,
+    "max_lots": 1.9053033951887515,
+    "pct_lots_capped": 0.0,
+    "pct_notional_capped": 58.253256459534484,
+    "avg_notional_usd": 443619.9539717271,
+    "p95_notional_usd": 500000.00000000006,
+    "max_notional_usd": 500000.00000000006,
+    "avg_sl_dist_usd": 3.608357328809255,
+    "p10_sl_dist_usd": 1.5668966204449746,
+    "min_sl_dist_usd": 0.5127571981633992,
+    "avg_R": 5.706790768869345,
+    "median_R": 4.6159853391495895,
+    "cum_R": 26724.901170615143
+  },
+  "guards": {
+    "MIN_SL_DIST_USD": 0.5,
+    "MAX_LOTS_CAP": 50.0,
+    "MAX_NOTIONAL_USD": 500000.0,
+    "DISABLE_TP": false,
+    "N_EXIT_TP": 45
+  },
+  "chandelier_diag": {
+    "ch_nan_count": 18,
+    "ch_invalid_side_count": 4315,
+    "ch_fallback_used_count": 4333,
+    "ch_fallback_if_invalid_side": true
+  },
+  "costs": {
+    "USE_SPREAD_COST": true,
+    "SPREAD_USD": 0.2,
+    "USE_SLIPPAGE": true,
+    "SLIPPAGE_ENTRY_ATR_MULT": 0.05,
+    "SLIPPAGE_EXIT_ATR_MULT": 0.05,
+    "USE_MTM_WORST_DD": true
+  },
+  "entry_engine": {
+    "atr_period": 1,
+    "atr_mult": 1.85,
+    "use_heikin_ashi": true
+  },
+  "trading_windows_utc": [],
+  "created_utc": "2026-01-13T10:39:29.457356+00:00"
+}

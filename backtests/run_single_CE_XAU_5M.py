@@ -73,10 +73,30 @@ CE_ATR_MULT = 1.85
 MIN_SL_DIST_USD = 0.50
 MAX_LOTS_CAP = 50.0
 MAX_NOTIONAL_USD = 500_000.0
+STOP_BUFFER_USD = 2.00
+
+
+# --- Diagnostics / parity toggles ---
+LOG_CH_DIAGNOSTICS = True
+CH_FALLBACK_IF_INVALID_SIDE = False
+
+# --- Entry-stop policy toggles ---
+# Strategy C: if chandelier stop exists but is invalid-side, SKIP the trade (no fallback).
+SKIP_ENTRY_IF_INVALID_CH_SIDE = False
+
+# If True, we still allow NaN chandelier to fallback to ATR (optional).
+ALLOW_ATR_FALLBACK_IF_CH_NAN = False
+
+# If True: entry SL is always ATR-based (sc.atr_init_mult * ATR), and chandelier is used only for trailing (tighten after entry).
+ATR_ENTRY_CH_TRAIL_ONLY = True
+
+# Hybrid regime switch:
+# - If chandelier stop is valid-side at entry -> use it, Else -> ATR entry stop
+HYBRID_CH_VALID_ELSE_ATR = False
 
 
 # =========================
-# PICK YOUR SCENARIO HERE
+# PICK SCENARIO
 # =========================
 STOP_MODE = "chandelier"
 ATR_PERIOD = 20
@@ -84,7 +104,7 @@ ATR_INIT_MULT = 1.0
 TP_R = 1.5
 TRAIL_START_R = 0.0
 ATR_TRAIL_MULT = 0.0
-CHAN_LOOKBACK = 180
+CHAN_LOOKBACK = 220
 MAX_HOLD_BARS = None
 
 # Trend ride mode (no TP)
@@ -430,13 +450,29 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
 
     mae = 0.0
     mfe = 0.0
+    entry_type = None  # "CH_VALID" or "ATR_FALLBACK"
     highest = None
     lowest = None
 
     skipped_min_sl = 0
 
+    # --- Chandelier diagnostics counters ---
+    ch_nan_count = 0
+    ch_invalid_side_count = 0
+    ch_fallback_used_count = 0
+
+    skipped_invalid_ch_side = 0
+    skipped_ch_nan = 0
+
+    # --- Hybrid diagnostics ---
+    hybrid_used_ch_valid = 0
+    hybrid_used_atr_fallback = 0
+    hybrid_seen_invalid_side = 0
+    hybrid_seen_nan = 0
+
     trades = []
     eq_rows = []
+    skipped_rows = []  # (time, side, reason, sl_dist)
 
     buy_sig = eng_entry["buy_signal"].to_numpy(dtype=bool)
     sell_sig = eng_entry["sell_signal"].to_numpy(dtype=bool)
@@ -498,6 +534,7 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                     ch = float(chan.iloc[i].long_stop_smooth)
                     if np.isfinite(ch):
                         sl_price = max(sl_price, ch)
+
                 else:
                     ch = float(chan.iloc[i].short_stop_smooth)
                     if np.isfinite(ch):
@@ -537,7 +574,7 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                     entry_time, t, side, entry_price, exit_px, lots,
                     float(init_sl_dist or 0.0), bool(lots_capped), bool(notional_capped),
                     float(notional),
-                    pnl, _trade_r(pnl, sl_cash), mae, mfe, reason
+                    pnl, _trade_r(pnl, sl_cash), mae, mfe, entry_type, reason
                 ))
 
                 balance += pnl
@@ -557,6 +594,7 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                 lowest = None
                 mae = 0.0
                 mfe = 0.0
+                entry_type = None  # "CH_VALID" or "ATR_FALLBACK"
 
         # ---- signal acts at next open ----
         if sig is not None:
@@ -575,7 +613,7 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                     entry_time, nxt_t, side, entry_price, exit_px, lots,
                     float(init_sl_dist or 0.0), bool(lots_capped), bool(notional_capped),
                     float(notional),
-                    pnl, _trade_r(pnl, sl_cash), mae, mfe, "FLIP"
+                    pnl, _trade_r(pnl, sl_cash), mae, mfe, entry_type, "FLIP"
                 ))
 
                 balance += pnl
@@ -595,13 +633,17 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                 lowest = None
                 mae = 0.0
                 mfe = 0.0
+                entry_type = None  # "CH_VALID" or "ATR_FALLBACK"
 
             # entry
             if not in_pos:
                 if not _in_windows_utc(nxt_t, TRADING_WINDOWS_UTC):
+                    skipped_rows.append((nxt_t, sig, "OUTSIDE_WINDOW", np.nan))
                     continue
 
                 side = sig
+                tp_price = None
+
                 atr_fill = float(sc_atr.iloc[i]) if np.isfinite(float(sc_atr.iloc[i])) else 0.0
 
                 entry_px = _apply_spread(nxt_o, side, is_entry=True)
@@ -609,34 +651,134 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
 
                 atr_entry = atr_fill
 
+                # ==============================
+                # Decide initial SL on ENTRY
+                # ==============================
                 if sc.stop_mode in ("atr_static", "atr_trailing", "atr_static_time"):
+                    # Standard ATR stop modes
                     init_sl_dist = max(1e-9, sc.atr_init_mult * atr_entry)
                     sl_price = entry_px - init_sl_dist if side == "BUY" else entry_px + init_sl_dist
+                    entry_type = "ATR_FALLBACK"
 
                 elif sc.stop_mode == "chandelier":
-                    if chan is None:
-                        raise RuntimeError("Chandelier stops not built.")
-                    if side == "BUY":
-                        ch = float(chan.iloc[i].long_stop_smooth)
-                        if np.isnan(ch):
-                            init_sl_dist = max(1e-9, sc.atr_init_mult * atr_entry)
-                            sl_price = entry_px - init_sl_dist
-                        else:
-                            sl_price = ch
-                            init_sl_dist = abs(entry_px - sl_price)
+                    if ATR_ENTRY_CH_TRAIL_ONLY:
+                        # -----------------------------------------
+                        # ATR-ENTRY + CHANDELIER-TRAIL ONLY (NEW)
+                        # -----------------------------------------
+                        init_sl_dist = max(1e-9, sc.atr_init_mult * atr_entry)
+                        sl_price = entry_px - init_sl_dist if side == "BUY" else entry_px + init_sl_dist
+                        entry_type = "ATR_FALLBACK"
+
                     else:
-                        ch = float(chan.iloc[i].short_stop_smooth)
-                        if np.isnan(ch):
-                            init_sl_dist = max(1e-9, sc.atr_init_mult * atr_entry)
-                            sl_price = entry_px + init_sl_dist
+
+                        # -----------------------------------------
+                        # HYBRID: CH valid-side else ATR entry stop
+                        # -----------------------------------------
+                        if HYBRID_CH_VALID_ELSE_ATR:
+                            if chan is None:
+                                raise RuntimeError("Chandelier stops not built.")
+
+                            atr_dist = max(1e-9, sc.atr_init_mult * atr_entry)
+
+                            if side == "BUY":
+                                ch = float(chan.iloc[i].long_stop_smooth)
+
+                                if np.isnan(ch):
+                                    hybrid_seen_nan += 1
+                                    init_sl_dist = atr_dist
+                                    sl_price = entry_px - init_sl_dist
+                                    entry_type = "ATR_FALLBACK"
+                                    hybrid_used_atr_fallback += 1
+                                else:
+                                    if ch < entry_px:
+                                        init_sl_dist = abs(entry_px - ch)
+                                        sl_price = ch
+                                        entry_type = "CH_VALID"
+                                        hybrid_used_ch_valid += 1
+                                    else:
+                                        hybrid_seen_invalid_side += 1
+                                        init_sl_dist = atr_dist
+                                        sl_price = entry_px - init_sl_dist
+                                        entry_type = "ATR_FALLBACK"
+                                        hybrid_used_atr_fallback += 1
+
+                            else:  # SELL
+                                ch = float(chan.iloc[i].short_stop_smooth)
+
+                                if np.isnan(ch):
+                                    hybrid_seen_nan += 1
+                                    init_sl_dist = atr_dist
+                                    sl_price = entry_px + init_sl_dist
+                                    entry_type = "ATR_FALLBACK"
+                                    hybrid_used_atr_fallback += 1
+                                else:
+                                    if ch > entry_px:
+                                        init_sl_dist = abs(entry_px - ch)
+                                        sl_price = ch
+                                        entry_type = "CH_VALID"
+                                        hybrid_used_ch_valid += 1
+                                    else:
+                                        hybrid_seen_invalid_side += 1
+                                        init_sl_dist = atr_dist
+                                        sl_price = entry_px + init_sl_dist
+                                        entry_type = "ATR_FALLBACK"
+                                        hybrid_used_atr_fallback += 1
+
                         else:
-                            sl_price = ch
-                            init_sl_dist = abs(entry_px - sl_price)
+                            # -----------------------------------------
+                            # Strategy C (skip invalid-side chandelier)
+                            # -----------------------------------------
+                            if chan is None:
+                                raise RuntimeError("Chandelier stops not built.")
+
+                            atr_fallback_dist = max(1e-9, sc.atr_init_mult * atr_entry)
+
+                            if side == "BUY":
+                                ch = float(chan.iloc[i].long_stop_smooth)
+
+                                if np.isnan(ch):
+                                    if not ALLOW_ATR_FALLBACK_IF_CH_NAN:
+                                        skipped_ch_nan += 1
+                                        side = None
+                                        continue
+                                    init_sl_dist = atr_fallback_dist
+                                    sl_price = entry_px - init_sl_dist
+                                    ch_fallback_used_count += 1
+                                else:
+                                    if SKIP_ENTRY_IF_INVALID_CH_SIDE and (ch >= entry_px):
+                                        skipped_invalid_ch_side += 1
+                                        side = None
+                                        continue
+                                    sl_price = ch
+                                    init_sl_dist = abs(entry_px - sl_price)
+
+                            else:  # SELL
+                                ch = float(chan.iloc[i].short_stop_smooth)
+
+                                if np.isnan(ch):
+                                    if not ALLOW_ATR_FALLBACK_IF_CH_NAN:
+                                        skipped_ch_nan += 1
+                                        side = None
+                                        continue
+                                    init_sl_dist = atr_fallback_dist
+                                    sl_price = entry_px + init_sl_dist
+                                    ch_fallback_used_count += 1
+                                else:
+                                    if SKIP_ENTRY_IF_INVALID_CH_SIDE and (ch <= entry_px):
+                                        skipped_invalid_ch_side += 1
+                                        side = None
+                                        continue
+                                    sl_price = ch
+                                    init_sl_dist = abs(entry_px - sl_price)
+
                 else:
                     raise ValueError(f"Unknown stop_mode: {sc.stop_mode}")
 
-                if init_sl_dist < MIN_SL_DIST_USD:
+                min_stop = max(MIN_SL_DIST_USD, STOP_BUFFER_USD)
+                if init_sl_dist < min_stop:
                     skipped_min_sl += 1
+                    # record skip: use nxt_t (entry time) and the signal side (sig)
+                    skipped_rows.append((nxt_t, side, "MIN_STOP", float(init_sl_dist)))
                     side = None
                     continue
 
@@ -650,12 +792,20 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
                     else:
                         tp_price = None
 
+                # --- TP executable distance guard (broker realism) ---
+                if tp_price is not None:
+                    tp_dist = abs(tp_price - entry_px)
+                    if tp_dist < min_stop:
+                        # TP too close to be executable → disable TP for this trade
+                        tp_price = None
+
                 base_eq = equity if sc.dynamic_risk else INITIAL_BALANCE
                 lots, lots_capped = _lots_for_risk(base_eq, init_sl_dist, RISK_PCT_PER_TRADE)
 
                 lots, notional_capped = _apply_notional_cap(lots, entry_px)
 
                 if lots <= 0:
+                    skipped_rows.append((nxt_t, side, "LOTS_LE_0", float(init_sl_dist)))
                     side = None
                     continue
 
@@ -675,7 +825,7 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
         columns=[
             "entry_time","exit_time","side","entry","exit","lots",
             "sl_dist_usd","lots_capped","notional_capped","notional_usd",
-            "pnl_cash","pnl_r","mae_cash","mfe_cash","exit_reason"
+            "pnl_cash","pnl_r","mae_cash","mfe_cash","entry_type","exit_reason"
         ],
     )
     if not trades_df.empty:
@@ -684,7 +834,29 @@ def run_one(df: pd.DataFrame, eng_entry: pd.DataFrame, sc: Scenario) -> Tuple[pd
 
     eq_df = pd.DataFrame(eq_rows, columns=["time","equity","dd_pct"])
     eq_df["time"] = pd.to_datetime(eq_df["time"], utc=True)
-    return trades_df, eq_df, skipped_min_sl
+
+    diag = {
+        "ch_nan_count": int(ch_nan_count),
+        "ch_invalid_side_count": int(ch_invalid_side_count),
+        "ch_fallback_used_count": int(ch_fallback_used_count),
+        "ch_fallback_if_invalid_side": bool(CH_FALLBACK_IF_INVALID_SIDE),
+        "skipped_invalid_ch_side": int(skipped_invalid_ch_side),
+        "skipped_ch_nan": int(skipped_ch_nan),
+        "skip_entry_if_invalid_ch_side": bool(SKIP_ENTRY_IF_INVALID_CH_SIDE),
+        "allow_atr_fallback_if_ch_nan": bool(ALLOW_ATR_FALLBACK_IF_CH_NAN),
+        "atr_entry_ch_trail_only": bool(ATR_ENTRY_CH_TRAIL_ONLY),
+        "hybrid_enabled": bool(HYBRID_CH_VALID_ELSE_ATR),
+        "hybrid_used_ch_valid": int(hybrid_used_ch_valid),
+        "hybrid_used_atr_fallback": int(hybrid_used_atr_fallback),
+        "hybrid_seen_invalid_side": int(hybrid_seen_invalid_side),
+        "hybrid_seen_nan": int(hybrid_seen_nan),
+    }
+
+    skipped_df = pd.DataFrame(skipped_rows, columns=["time", "side", "reason", "sl_dist"])
+    if not skipped_df.empty:
+        skipped_df["time"] = pd.to_datetime(skipped_df["time"], utc=True)
+
+    return trades_df, eq_df, skipped_min_sl, diag, skipped_df
 
 
 def compute_summary(trades_df: pd.DataFrame, eq_df: pd.DataFrame, skipped_min_sl: int) -> dict:
@@ -727,6 +899,25 @@ def compute_summary(trades_df: pd.DataFrame, eq_df: pd.DataFrame, skipped_min_sl
     notional = trades_df["notional_usd"].to_numpy(float)
     rvals = trades_df["pnl_r"].to_numpy(float)
 
+    # --- Breakdown by entry_type (if present) ---
+    by_type = {}
+    if "entry_type" in trades_df.columns and not trades_df.empty:
+        for k in ["CH_VALID", "ATR_FALLBACK"]:
+            sub = trades_df[trades_df["entry_type"] == k]
+            if len(sub) == 0:
+                continue
+            pn = sub["pnl_cash"].to_numpy(float)
+            r  = sub["pnl_r"].to_numpy(float)
+            wins = int((pn > 0).sum())
+            by_type[k] = {
+                "trades": int(len(sub)),
+                "win_rate": (wins / len(sub) * 100.0),
+                "avg_pnl": float(np.mean(pn)),
+                "cum_pnl": float(np.sum(pn)),
+                "avg_R": float(np.mean(r)),
+                "cum_R": float(np.sum(r)),
+            }
+
     def pct(x: float) -> float:
         return float(x) * 100.0
 
@@ -767,6 +958,8 @@ def compute_summary(trades_df: pd.DataFrame, eq_df: pd.DataFrame, skipped_min_sl
         "avg_R": float(np.mean(rvals)) if len(rvals) else 0.0,
         "median_R": float(np.median(rvals)) if len(rvals) else 0.0,
         "cum_R": float(np.sum(rvals)) if len(rvals) else 0.0,
+
+        "by_entry_type": by_type,
     }
 
 
@@ -816,6 +1009,14 @@ def _heatmap_by_dow_hour(values: pd.Series, times: pd.Series, agg: str = "mean")
     pivot = df.pivot_table(index="dow", columns="hour", values="v", aggfunc=agg)
     return pivot.reindex(index=range(7), columns=range(24))
 
+def _heatmap_counts_by_dow_hour(times: pd.Series) -> pd.DataFrame:
+    df = pd.DataFrame({"time": times})
+    df["dow"] = df["time"].dt.dayofweek
+    df["hour"] = df["time"].dt.hour
+    pivot = df.pivot_table(index="dow", columns="hour", values="time", aggfunc="count")
+    return pivot.reindex(index=range(7), columns=range(24))
+
+
 
 def plot_heatmap(pivot: pd.DataFrame, outpath: Path, title: str, mode: str):
     data = pivot.to_numpy(dtype=float)
@@ -835,12 +1036,28 @@ def plot_heatmap(pivot: pd.DataFrame, outpath: Path, title: str, mode: str):
         im = ax.imshow(data, aspect="auto", cmap="RdYlGn", vmin=vmin, vmax=vmax)
         cblabel = "Avg MAE ($) (0 best)"
         fmt = "{:.0f}"
+
     elif mode == "winrate":
         im = ax.imshow(data, aspect="auto", cmap="RdYlGn", vmin=0.0, vmax=1.0)
         cblabel = "Win Rate (0-1)"
         fmt = "{:.0%}"
+
+    elif mode == "skipped":
+        # lower is better (green), higher is worse (red)
+        vmax = np.nanpercentile(data, 95) if np.isfinite(data).any() else 1.0
+        vmax = max(1.0, float(vmax))
+        im = ax.imshow(data, aspect="auto", cmap="RdYlGn_r", vmin=0.0, vmax=vmax)
+        cblabel = "Skipped signals (count)"
+        fmt = "{:.0f}"
+
+    elif mode == "rate":
+        # 0 best (green), 1 worst (red)
+        im = ax.imshow(data, aspect="auto", cmap="RdYlGn_r", vmin=0.0, vmax=1.0)
+        cblabel = "Skip Rate (0–1)"
+        fmt = "{:.0%}"
+
     else:
-        raise ValueError("mode must be pnl or mae or winrate")
+        raise ValueError("mode must be pnl or mae or winrate or skipped or rate")
 
     ax.set_title(title)
     ax.set_xlabel("Hour of Day (UTC)")
@@ -890,9 +1107,10 @@ def main():
     (run_dir / "reports").mkdir(parents=True, exist_ok=True)
     (run_dir / "plots").mkdir(parents=True, exist_ok=True)
 
-    trades_df, eq_df, skipped_min_sl = run_one(df, eng_entry, sc)
+    trades_df, eq_df, skipped_min_sl, diag, skipped_df = run_one(df, eng_entry, sc)
 
     summary = compute_summary(trades_df, eq_df, skipped_min_sl=skipped_min_sl)
+
     meta = {
         "scenario": asdict(sc),
         "summary": summary,
@@ -903,6 +1121,7 @@ def main():
             "DISABLE_TP": DISABLE_TP,
             "N_EXIT_TP": int((trades_df["exit_reason"] == "TP").sum()),
         },
+        "chandelier_diag": diag if LOG_CH_DIAGNOSTICS else {},
         "costs": {
             "USE_SPREAD_COST": USE_SPREAD_COST,
             "SPREAD_USD": SPREAD_USD,
@@ -918,6 +1137,7 @@ def main():
 
     (run_dir / "reports" / "summary.json").write_text(json.dumps(meta, indent=2))
     trades_df.to_csv(run_dir / "reports" / "trades.csv", index=False)
+    skipped_df.to_csv(run_dir / "reports" / "skipped_signals.csv", index=False)
     eq_df.to_csv(run_dir / "reports" / "equity_curve.csv", index=False)
 
     title = (
@@ -929,6 +1149,32 @@ def main():
     plot_equity_dd(eq_df, run_dir / "plots" / "equity", title)
 
     if not trades_df.empty:
+
+        # --- Skipped signals heatmap (count by DOW/hour) ---
+        if skipped_df is not None and not skipped_df.empty:
+            skipped_pivot = _heatmap_counts_by_dow_hour(skipped_df["time"])
+            plot_heatmap(
+                skipped_pivot,
+                run_dir / "plots" / "heatmap_skipped_by_dow_hour.png",
+                "Skipped Signals by Day/Hour (Entry Time UTC) — higher=more skipped",
+                mode="skipped",
+            )
+
+        # --- Skip rate heatmap (skipped / (skipped + entered)) ---
+        if skipped_df is not None and not skipped_df.empty:
+            skipped_counts = _heatmap_counts_by_dow_hour(skipped_df["time"])
+            entered_counts = _heatmap_counts_by_dow_hour(trades_df["entry_time"]) if not trades_df.empty else skipped_counts * 0.0
+
+            denom = skipped_counts.fillna(0.0) + entered_counts.fillna(0.0)
+            skip_rate = skipped_counts.fillna(0.0) / denom.replace(0.0, np.nan)
+
+            plot_heatmap(
+                skip_rate,
+                run_dir / "plots" / "heatmap_skip_rate_by_dow_hour.png",
+                "Skip Rate by Day/Hour (Entry Time UTC) — red=more skipped",
+                mode="rate",
+            )
+
         pnl_pivot = _heatmap_by_dow_hour(trades_df["pnl_cash"], trades_df["entry_time"], agg="mean")
         plot_heatmap(pnl_pivot, run_dir / "plots" / "heatmap_pnl_by_dow_hour.png",
                      "Avg PnL by Day/Hour (Entry Time UTC)", mode="pnl")
