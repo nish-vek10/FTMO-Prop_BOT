@@ -47,7 +47,7 @@ import time
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -284,6 +284,150 @@ def chandelier_stop_arrays(O, H, L, C, atr_arr: np.ndarray, lookback: int, mult:
         sss[i] = min(short_stop[i], short_prev) if c[i - 1] < short_prev else short_stop[i]
 
     return lss, sss
+
+
+# ============================================================
+# ===================== CLOSE DETECTOR ========================
+# ============================================================
+
+# Track last known position so we can detect closes
+_last_pos_ticket: Optional[int] = None
+_last_pos_side: Optional[str] = None
+_last_pos_sl: Optional[float] = None
+_last_pos_tp: Optional[float] = None
+
+# Track trailing SL updates so we can label SL hits as TRAIL_SL when appropriate
+_last_trail_by_ticket: dict[int, dict] = {}  # {ticket: {"sl": float, "ts_utc": str}}
+
+def _utc_from_mt5_time(t: int) -> str:
+    # MT5 deal time is unix seconds in terminal timezone; treating as UTC is usually fine for logging.
+    # If your terminal runs local time, this will still be consistent internally.
+    return datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
+
+def _deal_reason_name(reason_code: int) -> str:
+    # Map common MT5 deal reasons; fall back to code.
+    # (These constants exist in MetaTrader5 python package)
+    mapping = {}
+    if hasattr(mt5, "DEAL_REASON_SL"):
+        mapping[int(mt5.DEAL_REASON_SL)] = "SL"
+    if hasattr(mt5, "DEAL_REASON_TP"):
+        mapping[int(mt5.DEAL_REASON_TP)] = "TP"
+    if hasattr(mt5, "DEAL_REASON_SO"):
+        mapping[int(mt5.DEAL_REASON_SO)] = "STOP_OUT"
+    if hasattr(mt5, "DEAL_REASON_CLIENT"):
+        mapping[int(mt5.DEAL_REASON_CLIENT)] = "MANUAL/CLIENT"
+    if hasattr(mt5, "DEAL_REASON_EXPERT"):
+        mapping[int(mt5.DEAL_REASON_EXPERT)] = "EXPERT"
+    if hasattr(mt5, "DEAL_REASON_MOBILE"):
+        mapping[int(mt5.DEAL_REASON_MOBILE)] = "MOBILE"
+    if hasattr(mt5, "DEAL_REASON_WEB"):
+        mapping[int(mt5.DEAL_REASON_WEB)] = "WEB"
+    if hasattr(mt5, "DEAL_REASON_ROLLOVER"):
+        mapping[int(mt5.DEAL_REASON_ROLLOVER)] = "ROLLOVER"
+    if hasattr(mt5, "DEAL_REASON_EXTERNAL_CLIENT"):
+        mapping[int(mt5.DEAL_REASON_EXTERNAL_CLIENT)] = "EXTERNAL_CLIENT"
+
+    return mapping.get(int(reason_code), f"OTHER({reason_code})")
+
+def _best_close_deal_for_ticket(ticket: int):
+    """
+    Fetch recent deals and return the most recent OUT deal for this position ticket.
+    """
+    # Look back a bit; tight window is fine because we only call this on a close event.
+    t_to = datetime.now(timezone.utc)
+    t_from = t_to - timedelta(hours=6)
+
+    deals = mt5.history_deals_get(t_from, t_to)
+    if deals is None or len(deals) == 0:
+        return None
+
+    # Filter deals for our ticket (position_id usually matches the position ticket)
+    # Also filter symbol/magic for safety.
+    filtered = []
+    for d in deals:
+        if getattr(d, "symbol", None) != MT5_SYMBOL:
+            continue
+        if int(getattr(d, "magic", 0) or 0) != int(MAGIC_NUMBER):
+            continue
+        pos_id = int(getattr(d, "position_id", 0) or 0)
+        if pos_id != int(ticket):
+            continue
+
+        entry = getattr(d, "entry", None)
+        # out types: DEAL_ENTRY_OUT / DEAL_ENTRY_OUT_BY (depending on broker)
+        if hasattr(mt5, "DEAL_ENTRY_OUT") and entry == mt5.DEAL_ENTRY_OUT:
+            filtered.append(d)
+        elif hasattr(mt5, "DEAL_ENTRY_OUT_BY") and entry == mt5.DEAL_ENTRY_OUT_BY:
+            filtered.append(d)
+
+    if not filtered:
+        return None
+
+    # Return the latest by time
+    filtered.sort(key=lambda x: int(getattr(x, "time", 0) or 0))
+    return filtered[-1]
+
+def detect_and_log_close(current_pos: Optional[mt5.TradePosition]):
+    """
+    If we had a position last cycle and now it's gone, pull close deal & log.
+    """
+    global _last_pos_ticket, _last_pos_side, _last_pos_sl, _last_pos_tp
+
+    # no prior position -> nothing to detect
+    if _last_pos_ticket is None:
+        return
+
+    # if still open -> nothing to do
+    if current_pos is not None and int(getattr(current_pos, "ticket", 0)) == int(_last_pos_ticket):
+        return
+
+    # position disappeared OR ticket changed (closed/flip)
+    ticket = int(_last_pos_ticket)
+    side = _last_pos_side
+
+    d = _best_close_deal_for_ticket(ticket)
+    if d is None:
+        log_event("CLOSE_OUT", ticket=ticket, side=side, reason="UNKNOWN", msg="No deal found in history window")
+        _last_pos_ticket = None
+        _last_pos_side = None
+        _last_pos_sl = None
+        _last_pos_tp = None
+        return
+
+    close_time_utc = _utc_from_mt5_time(getattr(d, "time", 0) or 0)
+    close_price = float(getattr(d, "price", 0.0) or 0.0)
+    profit = float(getattr(d, "profit", 0.0) or 0.0)
+    volume = float(getattr(d, "volume", 0.0) or 0.0)
+    reason_code = int(getattr(d, "reason", -1) or -1)
+    base_reason = _deal_reason_name(reason_code)
+
+    # Promote SL -> TRAIL_SL if we recently moved SL via trailing and it matches
+    final_reason = base_reason
+    if base_reason == "SL":
+        trail = _last_trail_by_ticket.get(ticket)
+        if trail:
+            tr_sl = float(trail.get("sl", 0.0) or 0.0)
+            # if close was near the last trailed SL, label as TRAIL_SL
+            if tr_sl > 0 and abs(close_price - tr_sl) <= 1.0:  # 1.0 USD tolerance
+                final_reason = "TRAIL_SL"
+
+    log_event(
+        "CLOSE_OUT",
+        ticket=ticket,
+        side=side,
+        close_time_utc=close_time_utc,
+        close_price=round(close_price, 3),
+        reason=final_reason,
+        profit=round(profit, 2),
+        volume=volume,
+        base_reason=base_reason,
+    )
+
+    # clear last position state (we already logged close)
+    _last_pos_ticket = None
+    _last_pos_side = None
+    _last_pos_sl = None
+    _last_pos_tp = None
 
 
 # ============================================================
@@ -634,13 +778,18 @@ def update_trailing_sl(pos: mt5.TradePosition, siginfo: SignalInfo):
     ok = ensure_sltp(pos, sl=new_sl, tp=tp_val, retries=3)
 
     if ok:
+        _last_trail_by_ticket[int(pos.ticket)] = {"sl": float(new_sl), "ts_utc": now_utc_iso()}
         log_event("TRAIL_SL", ticket=pos.ticket, side=side, old_sl=current_sl, new_sl=new_sl)
     else:
         log_event("TRAIL_SL_FAIL", ticket=pos.ticket, side=side, target_sl=new_sl)
 
+
 def main_loop():
     mt5_init_or_die()
     last_bar_time: Optional[pd.Timestamp] = None
+
+    oanda_fail_streak = 0
+    next_fetch_sleep = POLL_SLEEP_SECS
 
     log_event(
         "BOT_START",
@@ -662,8 +811,15 @@ def main_loop():
     while True:
         df = fetch_oanda_candles(OANDA_SYMBOL, OANDA_GRANULARITY, OANDA_CANDLE_COUNT)
         if df is None or df.empty:
-            time.sleep(POLL_SLEEP_SECS)
+            oanda_fail_streak += 1
+            # exponential backoff up to 60s
+            next_fetch_sleep = min(60.0, POLL_SLEEP_SECS * (2 ** min(oanda_fail_streak, 6)))
+            time.sleep(next_fetch_sleep)
             continue
+
+        # reset on success
+        oanda_fail_streak = 0
+        next_fetch_sleep = POLL_SLEEP_SECS
 
         siginfo = build_signals(df)
         if not siginfo:
@@ -678,9 +834,17 @@ def main_loop():
         last_bar_time = siginfo.bar_time
 
         pos = get_our_position()
+        detect_and_log_close(pos)
         open_side = None
         if pos:
             open_side = "BUY" if pos.type == mt5.POSITION_TYPE_BUY else "SELL"
+
+        global _last_pos_ticket, _last_pos_side, _last_pos_sl, _last_pos_tp
+        if pos:
+            _last_pos_ticket = int(pos.ticket)
+            _last_pos_side = open_side
+            _last_pos_sl = float(getattr(pos, "sl", 0.0) or 0.0)
+            _last_pos_tp = float(getattr(pos, "tp", 0.0) or 0.0)
 
         # log bar summary (no spam: once per bar)
         log_event(
@@ -692,12 +856,20 @@ def main_loop():
             chand_short=(None if not np.isfinite(siginfo.chand_short) else round(siginfo.chand_short, 3)),
         )
 
+        log_event(
+            "DEBUG_STATE",
+            pos_found=bool(pos),
+            open_side=open_side,
+            signal=siginfo.signal,
+        )
+
         # trailing update (no spam)
         if pos:
             update_trailing_sl(pos, siginfo)
 
         # flip/entry logic
         if siginfo.signal in ("BUY", "SELL"):
+            log_event("DEBUG_SIGNAL_BRANCH", desired=siginfo.signal, pos_found=bool(pos), open_side=open_side)
             desired = siginfo.signal
 
             if pos and open_side != desired:
